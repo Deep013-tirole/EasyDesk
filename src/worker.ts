@@ -39,7 +39,26 @@ async function handleExpressRequest(expressApp: any, webReq: Request): Promise<R
     }
   }
 
+  // Extract client IP safely from Cloudflare edge headers or standard proxy headers
+  const cfIp = webReq.headers.get('cf-connecting-ip');
+  const xForwardedFor = webReq.headers.get('x-forwarded-for');
+  const clientIp = cfIp || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '127.0.0.1');
+
   const socket = new Socket();
+  // Safe socket address definitions for any Express middleware expecting TCP metadata
+  Object.defineProperty(socket, 'remoteAddress', {
+    value: clientIp,
+    writable: true,
+    configurable: true,
+    enumerable: true
+  });
+  Object.defineProperty(socket, 'remotePort', {
+    value: 443,
+    writable: true,
+    configurable: true,
+    enumerable: true
+  });
+
   const req = new IncomingMessage(socket);
   req.method = webReq.method;
   req.url = path;
@@ -48,6 +67,17 @@ async function handleExpressRequest(expressApp: any, webReq: Request): Promise<R
   for (const [k, v] of webReq.headers.entries()) {
     req.headers[k.toLowerCase()] = v;
   }
+
+  if (cfIp && !req.headers['cf-connecting-ip']) {
+    req.headers['cf-connecting-ip'] = cfIp;
+  }
+  if (xForwardedFor && !req.headers['x-forwarded-for']) {
+    req.headers['x-forwarded-for'] = xForwardedFor;
+  }
+
+  (req as any).socket = socket;
+  (req as any).connection = socket;
+  (req as any).ip = clientIp;
 
   if (!req.headers['content-length'] && bodyBuffer.length > 0) {
     req.headers['content-length'] = String(bodyBuffer.length);

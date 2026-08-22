@@ -2647,6 +2647,43 @@ function requirePermission(requiredPermission: string | string[]) {
 // SECURITY MIDDLEWARES & HELPERS
 // =========================================================
 
+// Safe client IP extraction helper supporting both Node.js (TCP socket) and Cloudflare Workers (CF-Connecting-IP / X-Forwarded-For)
+export function getClientIp(req: express.Request | any): string {
+  if (!req) return '127.0.0.1';
+
+  // 1. Cloudflare edge connecting IP header (authoritative when behind Cloudflare proxy)
+  const cfIp = req.headers?.['cf-connecting-ip'] || req.headers?.['CF-Connecting-IP'];
+  if (typeof cfIp === 'string' && cfIp.trim()) {
+    return cfIp.trim();
+  }
+
+  // 2. Standard X-Forwarded-For proxy chain header
+  const xForwardedFor = req.headers?.['x-forwarded-for'] || req.headers?.['X-Forwarded-For'];
+  if (typeof xForwardedFor === 'string' && xForwardedFor.trim()) {
+    const firstIp = xForwardedFor.split(',')[0].trim();
+    if (firstIp) return firstIp;
+  }
+
+  // 3. Express req.ip property
+  if (typeof req.ip === 'string' && req.ip.trim()) {
+    return req.ip.trim();
+  }
+
+  // 4. Safe navigation for Node.js net.Socket / connection
+  if (req.socket?.remoteAddress) {
+    return req.socket.remoteAddress;
+  }
+  if (req.connection?.remoteAddress) {
+    return req.connection.remoteAddress;
+  }
+  if (req.connection?.socket?.remoteAddress) {
+    return req.connection.socket.remoteAddress;
+  }
+
+  // 5. Default fallback
+  return '127.0.0.1';
+}
+
 // Helmet-equivalent secure headers
 function helmetSecurity(req: express.Request, res: express.Response, next: express.NextFunction) {
   res.setHeader('X-DNS-Prefetch-Control', 'off');
@@ -2666,7 +2703,7 @@ function rateLimiter(req: express.Request, res: express.Response, next: express.
   if (!req.path.startsWith('/api/') || process.env.NODE_ENV !== 'production') {
     return next();
   }
-  const ip = req.ip || req.headers['x-forwarded-for']?.toString() || 'unknown';
+  const ip = getClientIp(req);
   const now = Date.now();
   const windowMs = 15 * 60 * 1000; // 15 mins
   const maxRequests = 1000; // Increase threshold for API routes
@@ -4815,7 +4852,7 @@ function logAudit(req: express.Request, actionType: string, description: string,
     description,
     employeeId,
     documentId,
-    ipAddress: (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0],
+    ipAddress: getClientIp(req),
     timestamp: new Date().toISOString()
   };
   if (!dbState.auditLogs) dbState.auditLogs = [];
