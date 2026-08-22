@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -71,11 +70,15 @@ const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'employees');
 const MEDIA_UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'media');
 const DOCS_UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'documents');
-[UPLOADS_BASE_DIR, UPLOADS_DIR, MEDIA_UPLOADS_DIR, DOCS_UPLOADS_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
+try {
+  [UPLOADS_BASE_DIR, UPLOADS_DIR, MEDIA_UPLOADS_DIR, DOCS_UPLOADS_DIR].forEach(dir => {
+    if (fs.existsSync && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+} catch (e) {
+  // Gracefully ignored in read-only / serverless / Cloudflare Worker environments
+}
 
 // Resilient media serving and on-demand reconstruction route for all uploaded files
 app.get(['/uploads/:folder/:filename', '/uploads/:filename'], (req, res) => {
@@ -4749,8 +4752,12 @@ app.get('/api/admin/analytics', (req, res) => {
 
 // Private Uploads Directory Configuration
 const PRIVATE_UPLOADS_DIR = path.join(process.cwd(), 'private_uploads', 'employees');
-if (!fs.existsSync(PRIVATE_UPLOADS_DIR)) {
-  fs.mkdirSync(PRIVATE_UPLOADS_DIR, { recursive: true });
+try {
+  if (fs.existsSync && !fs.existsSync(PRIVATE_UPLOADS_DIR)) {
+    fs.mkdirSync(PRIVATE_UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Gracefully ignored in read-only / serverless / Cloudflare Worker environments
 }
 
 // Data Masking Helpers for Compliance & Security
@@ -7827,6 +7834,7 @@ Our primary active services include **PAN Card, Aadhaar Demographics Update, fre
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -7847,4 +7855,11 @@ async function startServer() {
   });
 }
 
-startServer();
+export { app, startServer };
+
+// Auto-start standalone server when executed directly in Node.js / dev mode
+if (!process.env.IS_WORKER && (process.env.NODE_ENV !== 'production' || !process.env.CF_PAGES)) {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+  });
+}

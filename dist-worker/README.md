@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "easydesk" generated at 2026-08-22T11:58:28.756Z.
