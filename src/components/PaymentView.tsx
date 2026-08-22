@@ -6,7 +6,20 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PaymentConfig, PaymentMethod, User } from '../types.js';
-import { apiFetch } from '../lib/apiClient.js';
+import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
+import { getClientPaymentConfig } from '../lib/firestoreClientService.js';
+
+const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
+  upiId: 'easydesk@sbi',
+  upiName: 'EasyDesk Digital Services',
+  qrCodeUrl: 'https://images.unsplash.com/photo-1595079672139-5470805086ae?w=300',
+  bankAccountName: 'EasyDesk Digital Services Pvt Ltd',
+  bankName: 'State Bank of India',
+  accountNumber: '40918273645',
+  ifsc: 'SBIN0001234',
+  branch: 'Sector 62 Noida',
+  paymentInstructions: 'Please include your Order ID in the payment remarks/notes for instant reconciliation.'
+};
 
 export default function PaymentView({ 
   currentUser, 
@@ -15,8 +28,8 @@ export default function PaymentView({
   currentUser: User | null; 
   setView: (view: string) => void;
 }) {
-  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
-  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [loadingConfig, setLoadingConfig] = useState(false);
 
   // Active method selection
   const [method, setMethod] = useState<PaymentMethod>(PaymentMethod.UPI);
@@ -33,22 +46,36 @@ export default function PaymentView({
   const [copiedText, setCopiedText] = useState('');
 
   useEffect(() => {
+    let isMounted = true;
     const fetchPaymentConfig = async () => {
       try {
         const res = await fetch('/api/payment-settings');
         if (res.ok) {
-          const data = await res.json();
-          setPaymentConfig(data);
+          const data = await safeParseJsonResponse<any>(res);
+          if (data && (data.upiId || data.bankName || data.accountNumber) && isMounted) {
+            setPaymentConfig(prev => ({ ...prev, ...data }));
+            return;
+          }
         }
       } catch (err) {
-        console.error('Failed to load payment config:', err);
-      } finally {
-        setLoadingConfig(false);
+        console.warn('Failed to load payment config via API:', err);
+      }
+
+      // Authoritative Direct Firestore fallback
+      try {
+        const directPay = await getClientPaymentConfig();
+        if (directPay && isMounted) {
+          setPaymentConfig(prev => ({ ...prev, ...directPay }));
+        }
+      } catch (fsErr) {
+        console.warn('Failed to load direct Firestore payment config:', fsErr);
       }
     };
 
     fetchPaymentConfig();
+    return () => { isMounted = false; };
   }, []);
+
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);

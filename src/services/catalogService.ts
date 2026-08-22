@@ -1,4 +1,12 @@
 import { ServiceCategory, BlogCategory, Service, Blog, Review } from '../types';
+import { safeParseJsonResponse } from '../lib/apiClient';
+import { 
+  getClientServices, 
+  getClientCategories, 
+  getClientBlogCategories, 
+  getClientBlogs, 
+  getClientReviews 
+} from '../lib/firestoreClientService';
 
 export const CATALOG_CACHE_KEYS = {
   CATEGORIES: 'easydesk_cache_categories',
@@ -91,14 +99,13 @@ export function invalidateAllCatalogsCache(): void {
 }
 
 /**
- * Fetches data from a network endpoint.
- * If network request succeeds and returns valid data, stores it in localStorage.
- * If network request fails or returns error status, loads from localStorage fallback.
+ * Fetches data from a network endpoint with direct Firestore database fallback.
  */
 export async function fetchWithCache<T>(
   endpoint: string,
   cacheKey: string,
-  fallback: T
+  fallback: T,
+  directFirestoreLoader?: () => Promise<T | null>
 ): Promise<FetchResult<T>> {
   try {
     const url = endpoint.includes('?') ? `${endpoint}&_t=${Date.now()}` : `${endpoint}?_t=${Date.now()}`;
@@ -112,47 +119,83 @@ export async function fetchWithCache<T>(
     });
 
     if (res.ok) {
-      const data = await res.json();
-      if (data !== undefined && data !== null) {
+      const data = await safeParseJsonResponse<T>(res);
+      if (data !== null && (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0)) {
         setCachedCatalog(cacheKey, data);
         return { data, isCached: false };
       }
     }
-    
-    throw new Error(`HTTP error ${res.status}`);
   } catch (err: any) {
-    console.warn(`[CatalogService] Network fetch failed for ${endpoint}. Falling back to localStorage cache.`, err?.message || err);
-    const cachedData = getCachedCatalog<T>(cacheKey, fallback);
-    return {
-      data: cachedData,
-      isCached: true,
-      error: err?.message || 'Network fetch failed'
-    };
+    console.warn(`[CatalogService] Network fetch failed for ${endpoint}. Checking Cloud Firestore directly.`, err?.message || err);
   }
+
+  // Authoritative Direct Firestore Fallback
+  if (directFirestoreLoader) {
+    try {
+      const firestoreData = await directFirestoreLoader();
+      if (firestoreData !== null && (Array.isArray(firestoreData) ? firestoreData.length > 0 : Object.keys(firestoreData).length > 0)) {
+        setCachedCatalog(cacheKey, firestoreData);
+        return { data: firestoreData, isCached: false };
+      }
+    } catch (fsErr) {
+      console.warn(`[CatalogService] Direct Firestore fetch failed for ${cacheKey}:`, fsErr);
+    }
+  }
+
+  const cachedData = getCachedCatalog<T>(cacheKey, fallback);
+  return {
+    data: cachedData,
+    isCached: true
+  };
 }
 
 export async function fetchCategoriesWithCache(fallback: ServiceCategory[] = [], includeAll = false): Promise<FetchResult<ServiceCategory[]>> {
   const endpoint = includeAll ? '/api/categories?all=true' : '/api/categories';
   const cacheKey = includeAll ? CATALOG_CACHE_KEYS.CATEGORIES_ALL : CATALOG_CACHE_KEYS.CATEGORIES;
-  return fetchWithCache<ServiceCategory[]>(endpoint, cacheKey, fallback);
+  return fetchWithCache<ServiceCategory[]>(
+    endpoint, 
+    cacheKey, 
+    fallback,
+    () => getClientCategories(includeAll)
+  );
 }
 
 export async function fetchBlogCategoriesWithCache(fallback: BlogCategory[] = [], includeAll = false): Promise<FetchResult<BlogCategory[]>> {
   const endpoint = includeAll ? '/api/blog-categories?all=true' : '/api/blog-categories';
   const cacheKey = includeAll ? CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL : CATALOG_CACHE_KEYS.BLOG_CATEGORIES;
-  return fetchWithCache<BlogCategory[]>(endpoint, cacheKey, fallback);
+  return fetchWithCache<BlogCategory[]>(
+    endpoint, 
+    cacheKey, 
+    fallback,
+    () => getClientBlogCategories(includeAll)
+  );
 }
 
 export async function fetchServicesWithCache(fallback: Service[] = []): Promise<FetchResult<Service[]>> {
-  return fetchWithCache<Service[]>('/api/services', CATALOG_CACHE_KEYS.SERVICES, fallback);
+  return fetchWithCache<Service[]>(
+    '/api/services', 
+    CATALOG_CACHE_KEYS.SERVICES, 
+    fallback,
+    () => getClientServices()
+  );
 }
 
 export async function fetchBlogsWithCache(fallback: Blog[] = []): Promise<FetchResult<Blog[]>> {
-  return fetchWithCache<Blog[]>('/api/blogs', CATALOG_CACHE_KEYS.BLOGS, fallback);
+  return fetchWithCache<Blog[]>(
+    '/api/blogs', 
+    CATALOG_CACHE_KEYS.BLOGS, 
+    fallback,
+    () => getClientBlogs()
+  );
 }
 
 export async function fetchReviewsWithCache(fallback: Review[] = []): Promise<FetchResult<Review[]>> {
-  return fetchWithCache<Review[]>('/api/reviews', CATALOG_CACHE_KEYS.REVIEWS, fallback);
+  return fetchWithCache<Review[]>(
+    '/api/reviews', 
+    CATALOG_CACHE_KEYS.REVIEWS, 
+    fallback,
+    () => getClientReviews()
+  );
 }
 
 export interface AllCatalogs {
@@ -221,3 +264,4 @@ export async function fetchAllCatalogsWithCache(): Promise<FetchAllCatalogsResul
     errors
   };
 }
+

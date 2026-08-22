@@ -9,6 +9,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { FAQItem } from '../types.js';
 import { openGeneralWhatsApp } from '../lib/whatsapp.js';
+import { safeParseJsonResponse } from '../lib/apiClient.js';
+import { getClientAboutUs } from '../lib/firestoreClientService.js';
 
 interface AboutUsData {
   aboutText: string;
@@ -95,33 +97,88 @@ const DEFAULT_SERVICE_AREAS = [
   'Pan-India E-Governance Support'
 ];
 
+const DEFAULT_FOUNDER: FounderData = {
+  name: 'Devendra Sharma',
+  designation: 'Founder & Managing Director',
+  photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+  shortBio: 'Pioneering accessible digital documentation assistance for citizens and enterprises across India with a focus on speed, precision, and trust.',
+  detailedBio: 'Devendra founded EasyDesk with a clear vision: to ensure no citizen ever loses a day of work standing in government service queues. With extensive expertise in public administration workflows and digital identity systems, he spearheads the company\'s nationwide documentation assistance network.',
+  founderMessage: 'Welcome to EasyDesk. Our mission is to transform how Indians interact with digital governance and document filings. By combining intelligent document pre-auditing with dedicated human desk verification, we guarantee accuracy, privacy, and expedited delivery for every applicant.',
+  email: 'founder@easydesk.com',
+  signatureUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=200',
+  socialLinks: {
+    linkedin: 'https://linkedin.com/company/easydesk',
+    twitter: 'https://twitter.com/easydesk'
+  }
+};
+
+const DEFAULT_ABOUT_DATA: AboutUsData = {
+  aboutText: 'EasyDesk is India\'s premier commercial digital service desk platform. We simplify complex government applications, educational documentation, corporate registrations, and personal identity paperwork through verified desk assistance and transparent processing.',
+  vision: 'To empower every citizen and small business with effortless, transparent, and paperless digital documentation services across India.',
+  mission: 'To eliminate physical queue delays through automated document audits, step-by-step guidance, and verified desk officers.',
+  coreValues: DEFAULT_CORE_VALUES,
+  whyChooseUs: DEFAULT_WHY_CHOOSE,
+  howItWorks: DEFAULT_HOW_IT_WORKS,
+  achievements: [
+    { number: '1,50,000+', label: 'Applications Completed' },
+    { number: '99.4%', label: 'First-Time Approval Rate' },
+    { number: '100+', label: 'Services Offered' },
+    { number: '4.9 / 5', label: 'Citizen Rating' }
+  ],
+  serviceAreas: DEFAULT_SERVICE_AREAS,
+  teamStats: {
+    employeeCount: 45,
+    approximateEmployeeCount: 45,
+    trainedEmployeeCount: 40,
+    trainedQualifiedCount: 40,
+    combinedExperienceYears: 120,
+    description: 'A dedicated team of qualified document verification specialists, desk officers, and compliance advisors operating pan-India.',
+    teamDescription: 'A dedicated team of qualified document verification specialists, desk officers, and compliance advisors operating pan-India.'
+  }
+};
+
 export default function AboutUsView({ setView }: { setView: (v: string) => void }) {
-  const [aboutData, setAboutData] = useState<AboutUsData | null>(null);
-  const [founder, setFounder] = useState<FounderData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [aboutData, setAboutData] = useState<AboutUsData>(DEFAULT_ABOUT_DATA);
+  const [founder, setFounder] = useState<FounderData>(DEFAULT_FOUNDER);
+  const [loading, setLoading] = useState(false);
   const [activeValueIndex, setActiveValueIndex] = useState<number | null>(0);
   const [activeStepHover, setActiveStepHover] = useState<number | null>(null);
   const [searchArea, setSearchArea] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchAboutData = async () => {
       try {
         const res = await fetch('/api/about');
         if (res.ok) {
-          const data = await res.json();
-          setAboutData(data.aboutUs);
-          setFounder(data.founder);
+          const data = await safeParseJsonResponse<any>(res);
+          if (data && data.aboutUs && isMounted) {
+            setAboutData(data.aboutUs);
+            if (data.founder) setFounder(data.founder);
+            return;
+          }
         }
       } catch (err) {
-        console.error('Failed to load About Us content:', err);
-      } finally {
-        setLoading(false);
+        console.warn('Failed to load About Us content via API:', err);
+      }
+
+      // Authoritative Direct Firestore Fallback
+      try {
+        const directAbout = await getClientAboutUs();
+        if (isMounted) {
+          if (directAbout.aboutUs) setAboutData(directAbout.aboutUs);
+          if (directAbout.founder) setFounder(directAbout.founder);
+        }
+      } catch (fsErr) {
+        console.warn('Failed to load direct Firestore About Us:', fsErr);
       }
     };
 
     fetchAboutData();
+    return () => { isMounted = false; };
   }, []);
+
 
   if (loading) {
     return (

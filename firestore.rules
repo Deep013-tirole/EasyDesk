@@ -18,7 +18,23 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /faqs/{faqId} {
+      allow read, write: if true;
+    }
+
+    match /banners/{bannerId} {
+      allow read, write: if true;
+    }
+
+    match /pages/{pageId} {
+      allow read, write: if true;
+    }
+
     match /stats/{statId} {
+      allow read, write: if true;
+    }
+
+    match /settings/{settingId} {
       allow read, write: if true;
     }
 
@@ -34,15 +50,7 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    match /orders/{orderId} {
-      allow read, write: if true;
-    }
-
-    match /customers/{customerId} {
-      allow read, write: if true;
-    }
-
-    match /settings/{settingId} {
+    match /tickets/{ticketId} {
       allow read, write: if true;
     }
 
@@ -70,6 +78,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
     match /roles/{roleId} {
       allow read, write: if true;
     }
@@ -78,19 +94,7 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    match /faqs/{faqId} {
-      allow read, write: if true;
-    }
-
-    match /banners/{bannerId} {
-      allow read, write: if true;
-    }
-
     match /calendarEvents/{eventId} {
-      allow read, write: if true;
-    }
-
-    match /pages/{pageId} {
       allow read, write: if true;
     }
 
@@ -114,10 +118,6 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    match /tickets/{ticketId} {
-      allow read, write: if true;
-    }
-
     match /app_state/{docId} {
       allow read, write: if true;
     }
@@ -127,4 +127,6 @@ service cloud.firestore {
     }
   }
 }
+
+
 

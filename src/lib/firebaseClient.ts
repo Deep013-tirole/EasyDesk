@@ -11,6 +11,7 @@ import {
   updateProfile,
   User as FirebaseUser
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
+export const db = getFirestore(app, config.firestoreDatabaseId || '(default)');
 export const googleProvider = new GoogleAuthProvider();
 
 export {

@@ -8,8 +8,9 @@ import {
   Building2, Phone, CreditCard, Sliders, Key, ShieldCheck, Globe, Loader2
 } from 'lucide-react';
 import { Order, SupportTicket, Coupon, Review, User, OrderStatus, PaymentStatus, UserRole, Service, Blog, CalendarEvent, MasterData, ServiceCategory, BlogCategory } from '../types.js';
-import { fetchCsrfToken, adminFetch } from '../lib/apiClient.js';
+import { fetchCsrfToken, adminFetch, safeParseJsonResponse } from '../lib/apiClient.js';
 import { hasUserPermission, TAB_PERMISSIONS_MAP } from '../lib/permissions.js';
+import { authenticateAdminDirect, getClientPaymentConfig } from '../lib/firestoreClientService.js';
 
 // Lazy loaded heavy admin submodules
 const AboutUsAdminModule = lazy(() => import('./admin/AboutUsAdminModule.js'));
@@ -271,36 +272,67 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
     setAuthError('');
     setAuthSuccess('');
     const password = passwordPassed || 'password123';
+    const cleanEmail = email.trim();
+
     try {
-      const csrfToken = await fetchCsrfToken();
-      const res = await fetch('/api/auth/admin/login', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-csrf-token': csrfToken
-        },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const tokenVal = data.accessToken || data.token;
-        setAdminUser(data.user);
-        localStorage.setItem('easydesk_admin_user', JSON.stringify(data.user));
-        localStorage.setItem('easydesk_admin_token', tokenVal);
-        if (data.refreshToken) {
-          localStorage.setItem('easydesk_admin_refresh', data.refreshToken);
-          localStorage.setItem('easydesk_admin_refresh_token', data.refreshToken);
+      // 1. Try Primary Server REST API
+      try {
+        const csrfToken = await fetchCsrfToken();
+        const res = await fetch('/api/auth/admin/login', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken
+          },
+          body: JSON.stringify({ email: cleanEmail, password })
+        });
+        const data = await safeParseJsonResponse<any>(res);
+        if (res.ok && data && (data.accessToken || data.token)) {
+          const tokenVal = data.accessToken || data.token;
+          setAdminUser(data.user);
+          localStorage.setItem('easydesk_admin_user', JSON.stringify(data.user));
+          localStorage.setItem('easydesk_admin_token', tokenVal);
+          if (data.refreshToken) {
+            localStorage.setItem('easydesk_admin_refresh', data.refreshToken);
+            localStorage.setItem('easydesk_admin_refresh_token', data.refreshToken);
+          }
+          triggerAlert(`Welcome back, ${data.user.name}! Authenticated as ${data.user.role}`);
+          fetchTabData();
+          onRefreshCatalogs?.();
+          return;
         }
-        triggerAlert(`Welcome back, ${data.user.name}! Authenticated as ${data.user.role}`);
+
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          if (data && data.message) {
+            setAuthError(data.message);
+            return;
+          }
+        }
+      } catch (apiErr: any) {
+        if (apiErr.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('Unexpected')) {
+          setAuthError(apiErr.message);
+          return;
+        }
+      }
+
+      // 2. Direct Cloud Firestore Authoritative Authentication Fallback
+      const directResult = await authenticateAdminDirect(cleanEmail, password);
+      if (directResult.success && directResult.user && directResult.token) {
+        setAdminUser(directResult.user);
+        localStorage.setItem('easydesk_admin_user', JSON.stringify(directResult.user));
+        localStorage.setItem('easydesk_admin_token', directResult.token);
+        triggerAlert(`Welcome back, ${directResult.user.name}! Authenticated as ${directResult.user.role} (Cloud DB)`);
         fetchTabData();
         onRefreshCatalogs?.();
-      } else {
-        setAuthError(data.message || 'Administrative login failed');
+        return;
       }
-    } catch (err) {
-      setAuthError('Express connection failure.');
+
+      setAuthError(directResult.error || 'Administrative login failed. Please verify credentials.');
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication error.');
     }
   };
+
 
   const handleManualLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,10 +441,21 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       // Payment settings
       fetchTasks.push(
         fetch('/api/payment-settings')
-          .then(res => res.ok ? res.json() : null)
-          .then(data => { if (data) setPaymentConfig(data); })
-          .catch(() => {})
+          .then(res => safeParseJsonResponse<any>(res))
+          .then(async data => {
+            if (data && (data.upiId || data.bankName)) {
+              setPaymentConfig(data);
+            } else {
+              const directConfig = await getClientPaymentConfig();
+              if (directConfig) setPaymentConfig(directConfig);
+            }
+          })
+          .catch(async () => {
+            const directConfig = await getClientPaymentConfig();
+            if (directConfig) setPaymentConfig(directConfig);
+          })
       );
+
 
       // Conditional restricted tables
       if (hasPermission('pages.manage')) {

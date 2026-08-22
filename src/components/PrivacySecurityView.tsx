@@ -8,6 +8,8 @@ import {
   Sparkles, Zap
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { safeParseJsonResponse } from '../lib/apiClient.js';
+import { getClientPrivacySecurity } from '../lib/firestoreClientService.js';
 
 export interface PrivacySecurityData {
   hero: {
@@ -74,8 +76,136 @@ export interface PrivacySecurityData {
   faqs: Array<{ question: string; answer: string }>;
 }
 
+const DEFAULT_PRIVACY_SECURITY_FALLBACK: PrivacySecurityData = {
+  hero: {
+    heading: 'Your Privacy & Security Matter',
+    subtitle: 'EasyDesk follows secure document handling practices and protects your personal information throughout the service process.',
+    badgeText: 'Privacy & Security Notice',
+    trustCards: [
+      { id: 'tc-1', title: 'Secure Document Handling', description: 'End-to-end audit pipeline with strict access controls.', icon: 'ShieldCheck' },
+      { id: 'tc-2', title: 'SSL Encrypted Communication', description: '256-bit SSL/TLS protocol protecting all transferred data.', icon: 'Lock' },
+      { id: 'tc-3', title: 'Privacy Protected', description: 'Zero third-party monetization or data selling guaranteed.', icon: 'EyeOff' },
+      { id: 'tc-4', title: 'Verified Staff Access', description: 'Background-verified desk officers with role-based restrictions.', icon: 'UserCheck' },
+      { id: 'tc-5', title: 'Manual Verification Process', description: 'Human double-check on document quality before portal upload.', icon: 'CheckCircle2' }
+    ]
+  },
+  mayRequest: {
+    title: 'Information EasyDesk May Request',
+    subtitle: 'To process government filings and authorized digital services on your behalf, we may voluntarily collect:',
+    importantNote: 'Login credentials and OTP are used ONLY for completing the requested service. They are NEVER reused for any other purpose.',
+    items: [
+      { id: 'mr-1', name: 'Customer Identity Details', examples: 'Customer Full Name, Mobile Number, Email Address, Residential Address', category: 'Basic Info', icon: 'User' },
+      { id: 'mr-2', name: 'Identity Documents', examples: 'Aadhaar Card, PAN Card, Passport, Driving Licence', category: 'Government ID', icon: 'FileText' },
+      { id: 'mr-3', name: 'Educational & Employment Records', examples: 'Degrees, Transcripts, Experience Letters, Form 16', category: 'Verification', icon: 'Award' },
+      { id: 'mr-4', name: 'Government Application IDs', examples: 'Application Login ID, Portal Application Password (only when required)', category: 'Portal Filing', icon: 'Key' },
+      { id: 'mr-5', name: 'One-Time Passwords (OTP)', examples: 'Aadhaar e-KYC OTP, Portal Filing OTP (only during active filing)', category: 'Temporary OTP', icon: 'Smartphone' },
+      { id: 'mr-6', name: 'Uploaded Supporting Files', examples: 'Photographs, Digital Signatures, Application Reference Numbers', category: 'Service Attachments', icon: 'UploadCloud' }
+    ]
+  },
+  neverRequest: {
+    title: 'Information EasyDesk WILL NEVER REQUEST',
+    warningHeading: 'EASYDESK WILL NEVER ASK FOR',
+    largeWarning: 'If anyone asks for these details while claiming to represent EasyDesk, it is fraudulent.',
+    redItems: [
+      'Bank OTP', 'UPI PIN', 'ATM PIN', 'Debit Card PIN', 'Credit Card PIN',
+      'Net Banking Password', 'CVV Number', 'Debit Card OTP', 'Credit Card OTP',
+      'Internet Banking OTP', 'Wallet PIN', 'Crypto Wallet Recovery Phrase',
+      'Financial Passwords', 'Bank Account Password', 'Investment Account Password',
+      'Trading Account Password', 'Any Secret Banking Credentials'
+    ]
+  },
+  dataProtection: {
+    title: 'How EasyDesk Protects Your Data',
+    subtitle: 'Multi-layered administrative, technical, and physical security measures.',
+    measures: [
+      { id: 'dp-1', title: 'SSL/TLS Encryption', description: 'All web traffic and API endpoints communicate exclusively over TLS 1.3 encryption.', icon: 'Lock' },
+      { id: 'dp-2', title: 'Role Based Internal Access', description: 'Employees can only view documents assigned specifically to their desk workflow.', icon: 'ShieldCheck' },
+      { id: 'dp-3', title: 'Secure Document Storage', description: 'Encrypted storage buckets with automated time-bound archival.', icon: 'Server' },
+      { id: 'dp-4', title: 'Limited Employee Access', description: 'Strict principle of least privilege enforced across all internal software.', icon: 'UserCheck' },
+      { id: 'dp-5', title: 'Activity Logs', description: 'Every single view, download, or edit action is logged with timestamp & operator IP.', icon: 'FileText' },
+      { id: 'dp-6', title: 'Secure Server Infrastructure', description: 'Isolated Cloud Run container sandbox with continuous firewall monitoring.', icon: 'HardDrive' },
+      { id: 'dp-7', title: 'Password Encryption', description: 'Bcrypt hashing algorithm for all user account credentials.', icon: 'Key' },
+      { id: 'dp-8', title: 'Controlled File Access', description: 'Signed temporary URLs with short validity periods for document downloads.', icon: 'EyeOff' },
+      { id: 'dp-9', title: 'Document Access Tracking', description: 'Real-time alert notifications sent to customers when staff audits files.', icon: 'Bell' },
+      { id: 'dp-10', title: 'Data Isolation', description: 'Customer records are compartmentalized to prevent cross-account leakages.', icon: 'Layers' },
+      { id: 'dp-11', title: 'Restricted Admin Permissions', description: 'Super-admin level approval required for bulk or elevated data operations.', icon: 'Sliders' },
+      { id: 'dp-12', title: 'Regular Security Monitoring', description: 'Periodic vulnerability scans and automated anomaly detection.', icon: 'RefreshCw' }
+    ]
+  },
+  dataUsage: {
+    title: 'Data Usage Policy',
+    allowedPurposes: [
+      'Processing requested government and digital services',
+      'Official government portal form submissions',
+      'Pre-audit document accuracy and quality verification',
+      'Customer communication regarding order status & queries',
+      'Sending real-time order status updates via SMS / WhatsApp / Email',
+      'Fulfilling statutory legal and regulatory record-keeping obligations'
+    ],
+    neverSellStatement: 'EasyDesk NEVER sells customer data under any circumstances.',
+    neverShareStatement: 'EasyDesk NEVER shares customer data with unauthorized third parties.'
+  },
+  dataRetention: {
+    title: 'Data Retention Policy',
+    description: 'Documents and submitted application payloads are stored strictly for the operational period required to process your order. Following completion, records are archived or securely deleted in accordance with internal company policy and applicable statutory rules.',
+    customerRights: 'Customers retain the right to request full account data deletion or document purging once active order processing is concluded, subject to legal retention obligations.',
+    purgeOptionEnabled: true
+  },
+  employeeControls: {
+    title: 'Employee Privacy & Access Controls',
+    rules: [
+      'Only authorized and background-verified EasyDesk staff can access customer application files.',
+      'Staff access is continuously monitored by automated internal compliance checkers.',
+      'Every customer document view or download generates an unalterable audit log entry.',
+      'Fine-grained permission matrices prevent employees from accessing data outside active assignments.',
+      'No employee can access customer data outside their specific work requirements.'
+    ]
+  },
+  customerResponsibilities: {
+    title: 'Customer Security Responsibilities',
+    checklist: [
+      { id: 'cr-1', title: 'Provide Correct Information', description: 'Ensure all details provided in applications match official government records exactly.' },
+      { id: 'cr-2', title: 'Keep Documents Genuine', description: 'Upload authentic, unaltered document scans to prevent rejection or legal penalties.' },
+      { id: 'cr-3', title: 'Never Share Banking Passwords', description: 'Do not disclose Net Banking passwords, CVV, or card PINs to anyone.' },
+      { id: 'cr-4', title: 'Never Share PINs or Secrets', description: 'Keep UPI PINs, ATM PINs, and banking passwords completely confidential.' },
+      { id: 'cr-5', title: 'Report Suspicious Activity Immediately', description: 'If anyone asks for financial passwords claiming to represent EasyDesk, report them instantly.' },
+      { id: 'cr-6', title: 'Use Official EasyDesk Channels', description: 'Interact only through easydesk.com website, verified WhatsApp, or official desk numbers.' },
+      { id: 'cr-7', title: 'Verify Phone Numbers Before Sharing OTP', description: 'Confirm that the agent requesting an application filing OTP is officially assigned on your EasyDesk order tracking screen.' }
+    ]
+  },
+  fraudTimeline: {
+    title: 'Fraud & Scam Awareness Guide',
+    subtitle: 'What to do if someone claims to represent EasyDesk and asks for secret credentials:',
+    steps: [
+      { step: 1, title: 'Do Not Panic', description: 'EasyDesk will never demand urgent payments or banking PINs over unsolicited calls.' },
+      { step: 2, title: 'Verify Identity', description: 'Cross-check the caller number against official contact numbers on easydesk.com or check your live order tracking screen.' },
+      { step: 3, title: 'Never Share Banking Credentials', description: 'Immediately decline if asked for Bank OTP, UPI PIN, Card CVV, or Net Banking passwords.' },
+      { step: 4, title: 'Contact Official Support', description: 'Reach out to support@easydesk.com or call our official desk hotline at +91 99999 88888.' },
+      { step: 5, title: 'Report Suspicious Activity', description: 'Submit an emergency fraud alert via our online report form for immediate security response.' }
+    ]
+  },
+  securityContact: {
+    title: 'Contact EasyDesk Security Team',
+    securityEmail: 'security@easydesk.com',
+    supportEmail: 'support@easydesk.com',
+    customerCarePhone: '+91 99999 88888',
+    emergencyHotline: '+91 99999 77777',
+    businessHours: 'Monday – Saturday: 9:00 AM – 7:00 PM IST',
+    officeAddress: 'Digital India Tower, Plot 14, Sector 62, Noida, UP - 201301'
+  },
+  legalCompliance: {
+    title: 'Legal Compliance Statement',
+    statement: 'EasyDesk operates in strict compliance with the Information Technology Act 2000, Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules 2011, and Digital Personal Data Protection (DPDP) Act norms.'
+  },
+  faqs: [
+    { question: 'Why does EasyDesk need my ID proofs?', answer: 'Official government department filings for certificates, cards, and tax services mandate proof of identity and address submission.' },
+    { question: 'Does EasyDesk store my password?', answer: 'No passwords are stored in plain text. Account passwords are encrypted using one-way cryptographic bcrypt hashing.' },
+    { question: 'Can an employee see my files after order completion?', answer: 'No. Access permissions are automatically revoked once an application has reached final completion status.' }
+  ]
+};
+
 export default function PrivacySecurityView({ setView }: { setView?: (v: string) => void }) {
-  const [data, setData] = useState<PrivacySecurityData | null>(null);
+  const [data, setData] = useState<PrivacySecurityData>(DEFAULT_PRIVACY_SECURITY_FALLBACK);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -106,19 +236,38 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
   useEffect(() => {
     const fetchContent = async () => {
       try {
+        // 1. Try Server API
         const res = await fetch('/api/privacy-security');
         if (res.ok) {
-          const json = await res.json();
-          setData(json);
+          const json = await safeParseJsonResponse<any>(res);
+          if (json && json.hero) {
+            setData(json);
+            return;
+          }
         }
       } catch (err) {
-        console.error('Failed to load Privacy & Security settings:', err);
-      } finally {
-        setLoading(false);
+        console.warn('API fetch for privacy-security failed, trying direct Firestore:', err);
       }
+
+      // 2. Direct Firestore Authoritative Read Fallback
+      try {
+        const firestoreData = await getClientPrivacySecurity();
+        if (firestoreData && firestoreData.hero) {
+          setData(firestoreData);
+          return;
+        }
+      } catch (fsErr) {
+        console.warn('Direct Firestore fetch for privacy-security failed:', fsErr);
+      }
+
+      // 3. Guaranteed Default Schema Fallback (Never leaves page blank)
+      setData(DEFAULT_PRIVACY_SECURITY_FALLBACK);
+      setLoading(false);
     };
-    fetchContent();
+
+    fetchContent().finally(() => setLoading(false));
   }, []);
+
 
   const handleReportScam = async (e: React.FormEvent) => {
     e.preventDefault();

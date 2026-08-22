@@ -1,6 +1,6 @@
 /**
  * Centralized API Client for EasyDesk
- * Handles CSRF headers, Authorization Bearer tokens, JSON serialization, and error handling.
+ * Handles CSRF headers, Authorization Bearer tokens, JSON serialization, and safe error handling.
  */
 
 let cachedCsrfToken: string | null = null;
@@ -10,16 +10,34 @@ export async function fetchCsrfToken(): Promise<string> {
   try {
     const res = await fetch('/api/security/csrf');
     if (res.ok) {
-      const data = await res.json();
-      if (data.csrfToken) {
+      const data = await safeParseJsonResponse<any>(res);
+      if (data && data.csrfToken) {
         cachedCsrfToken = data.csrfToken;
         return data.csrfToken;
       }
     }
   } catch (err) {
-    console.error('Failed to fetch CSRF token:', err);
+    console.warn('Failed to fetch CSRF token from server:', err);
   }
   return 'easydesk_secure_csrf_token_2026_val';
+}
+
+/**
+ * Safely parses a fetch Response as JSON without throwing unexpected SyntaxErrors on HTML or empty responses.
+ */
+export async function safeParseJsonResponse<T = any>(res: Response): Promise<T | null> {
+  try {
+    const text = await res.text();
+    if (!text || text.trim().length === 0) return null;
+    // If response starts with HTML doctype or tag, it is a non-JSON fallback page
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype') || trimmed.startsWith('<html') || trimmed.startsWith('<head')) {
+      return null;
+    }
+    return JSON.parse(text) as T;
+  } catch (err) {
+    return null;
+  }
 }
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -66,18 +84,15 @@ export async function apiFetch(endpoint: string, options: RequestOptions = {}): 
     let backendError = response.statusText;
     try {
       const cloned = response.clone();
-      const errJson = await cloned.json();
+      const errJson = await safeParseJsonResponse<any>(cloned);
       if (errJson && errJson.message) backendError = errJson.message;
     } catch {}
 
-    console.warn(`[EasyDesk API ERROR]
+    console.warn(`[EasyDesk API Notice]
 Endpoint: ${endpoint}
 Method: ${method}
 Status: ${status}
-Reason: ${backendError}
-Auth Present: ${!!authToken}
-CSRF Present: ${!!csrfTokenUsed}
-Payload:`, body !== undefined ? body : '(none)');
+Reason: ${backendError}`);
   }
 
   return response;
@@ -93,8 +108,9 @@ export async function apiClient<T = any>(endpoint: string, options: RequestOptio
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     try {
-      const errorData = await response.json();
-      if (errorData.message) {
+      const cloned = response.clone();
+      const errorData = await safeParseJsonResponse<any>(cloned);
+      if (errorData && errorData.message) {
         errorMessage = errorData.message;
       }
     } catch {
@@ -108,5 +124,10 @@ export async function apiClient<T = any>(endpoint: string, options: RequestOptio
     return {} as T;
   }
 
-  return response.json();
+  const parsed = await safeParseJsonResponse<T>(response);
+  if (parsed === null) {
+    return {} as T;
+  }
+  return parsed;
 }
+

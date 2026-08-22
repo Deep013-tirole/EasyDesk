@@ -544,11 +544,13 @@ export interface Blog {
   imageUrl?: string;
   author: string;
   date: string;
+  publishedAt?: string;
   comments: BlogComment[];
   views: number;
   status?: string; // e.g. active, inactive, draft, published, scheduled
   featured?: boolean;
   excerpt?: string;
+
   shortDescription?: string;
   readTime?: string | number;
   scheduledAt?: string;

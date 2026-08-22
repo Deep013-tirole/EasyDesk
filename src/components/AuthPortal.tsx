@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Mail, Lock, ShieldAlert, ShieldCheck, RefreshCw, Shield, KeyRound, ArrowRight, Sparkles } from 'lucide-react';
 import { User } from '../types.js';
-import { fetchCsrfToken } from '../lib/apiClient.js';
+import { fetchCsrfToken, safeParseJsonResponse } from '../lib/apiClient.js';
+import { authenticateAdminDirect } from '../lib/firestoreClientService.js';
 
 interface AuthPortalProps {
   setView: (view: string) => void;
@@ -27,48 +28,78 @@ export default function AuthPortal({
     setSuccess(null);
     setLoading(true);
 
+    const cleanEmail = email.trim();
+    const cleanPassword = password;
+
     try {
-      // Retrieve valid CSRF Token
-      const csrfToken = await fetchCsrfToken();
+      // 1. Try Primary Server REST API Login
+      try {
+        const csrfToken = await fetchCsrfToken();
+        const res = await fetch('/api/auth/admin/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({ email: cleanEmail, password: cleanPassword })
+        });
 
-      // Direct REST API Login
-      const res = await fetch('/api/auth/admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken
-        },
-        body: JSON.stringify({ email: email.trim(), password })
-      });
+        const data = await safeParseJsonResponse<any>(res);
 
-      const data = await res.json();
+        if (res.ok && data && (data.accessToken || data.token)) {
+          const tokenVal = data.accessToken || data.token;
+          localStorage.setItem('easydesk_admin_token', tokenVal);
+          if (data.refreshToken) {
+            localStorage.setItem('easydesk_admin_refresh', data.refreshToken);
+          }
+          localStorage.setItem('easydesk_admin_user', JSON.stringify(data.user));
 
-      if (res.ok && data.accessToken) {
-        localStorage.setItem('easydesk_admin_token', data.accessToken);
-        if (data.refreshToken) {
-          localStorage.setItem('easydesk_admin_refresh', data.refreshToken);
+          setCurrentUser(data.user);
+          setSuccess(`Welcome back, ${data.user.name || 'Admin'}! Redirecting to Admin Panel...`);
+          
+          setTimeout(() => {
+            setView('admin');
+          }, 500);
+          return;
         }
-        localStorage.setItem('easydesk_admin_user', JSON.stringify(data.user));
 
-        setCurrentUser(data.user);
-        setSuccess(`Welcome back, ${data.user.name || 'Admin'}! Redirecting to Admin Panel...`);
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          if (data && data.message) {
+            throw new Error(data.message);
+          }
+        }
+      } catch (apiErr: any) {
+        if (apiErr.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('Unexpected')) {
+          throw apiErr;
+        }
+      }
+
+      // 2. Direct Cloud Firestore Authoritative Authentication Fallback
+      const directResult = await authenticateAdminDirect(cleanEmail, cleanPassword);
+      if (directResult.success && directResult.user && directResult.token) {
+        localStorage.setItem('easydesk_admin_token', directResult.token);
+        localStorage.setItem('easydesk_admin_user', JSON.stringify(directResult.user));
+
+        setCurrentUser(directResult.user);
+        setSuccess(`Welcome back, ${directResult.user.name || 'Admin'}! Verified via Authoritative Cloud Firestore. Redirecting...`);
         
         setTimeout(() => {
           setView('admin');
-        }, 600);
+        }, 500);
         return;
       }
 
-      // Display backend error message clearly
-      throw new Error(data.message || 'Administrative Login Failed. Please check your credentials.');
+      // Display clear failure error
+      throw new Error(directResult.error || 'Administrative Login Failed. Please verify your Login ID and password.');
 
     } catch (err: any) {
-      console.error('Admin login error:', err);
+      console.warn('Admin login notice:', err);
       setError(err.message || 'Administrative Login Failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="notranslate max-w-7xl mx-auto px-4 py-12 md:py-16 font-sans flex items-center justify-center min-h-[75vh]" id="auth-portal-root" translate="no">

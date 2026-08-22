@@ -5,9 +5,10 @@ import {
   Sparkles, Headphones, ShieldCheck, Zap, Bot
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { apiFetch } from '../lib/apiClient.js';
+import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
 import { openGeneralWhatsApp } from '../lib/whatsapp.js';
 import { BaseCard, BaseCardBody } from './BaseCard.js';
+import { getClientContactSettings } from '../lib/firestoreClientService.js';
 
 interface ContactSettings {
   companyName: string;
@@ -30,9 +31,30 @@ interface ContactSettings {
   };
 }
 
+const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
+  companyName: 'EasyDesk Digital Services Pvt Ltd',
+  phone: '+91 99999 88888',
+  whatsapp: '+91 99999 88888',
+  email: 'support@easydesk.com',
+  alternateEmail: 'info@easydesk.com',
+  address: 'Digital India Tower, Plot 14, Sector 62',
+  city: 'Noida',
+  state: 'Uttar Pradesh',
+  pinCode: '201301',
+  workingHours: 'Monday - Saturday: 9:00 AM - 7:00 PM IST',
+  googleMapsUrl: 'https://maps.google.com/?q=Sector+62+Noida',
+  socialMedia: {
+    facebook: 'https://facebook.com/easydesk',
+    instagram: 'https://instagram.com/easydesk',
+    youtube: 'https://youtube.com/easydesk',
+    linkedin: 'https://linkedin.com/company/easydesk',
+    twitter: 'https://twitter.com/easydesk'
+  }
+};
+
 export default function ContactView({ setView }: { setView?: (v: string) => void }) {
-  const [contactInfo, setContactInfo] = useState<ContactSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [contactInfo, setContactInfo] = useState<ContactSettings>(DEFAULT_CONTACT_SETTINGS);
+  const [loading, setLoading] = useState(false);
 
   // Form fields
   const [name, setName] = useState('');
@@ -46,22 +68,36 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    let isMounted = true;
     const fetchContactInfo = async () => {
       try {
         const res = await fetch('/api/contact-settings');
         if (res.ok) {
-          const data = await res.json();
-          setContactInfo(data);
+          const data = await safeParseJsonResponse<any>(res);
+          if (data && (data.phone || data.email || data.companyName) && isMounted) {
+            setContactInfo(prev => ({ ...prev, ...data }));
+            return;
+          }
         }
       } catch (err) {
-        console.error('Failed to load contact settings:', err);
-      } finally {
-        setLoading(false);
+        console.warn('Failed to load contact settings via API:', err);
+      }
+
+      // Authoritative Direct Firestore Fallback
+      try {
+        const directContact = await getClientContactSettings();
+        if (directContact && isMounted) {
+          setContactInfo(prev => ({ ...prev, ...directContact }));
+        }
+      } catch (fsErr) {
+        console.warn('Failed to load direct Firestore contact settings:', fsErr);
       }
     };
 
     fetchContactInfo();
+    return () => { isMounted = false; };
   }, []);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
