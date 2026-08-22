@@ -5,6 +5,24 @@ import { GoogleGenAI } from '@google/genai';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+
+// Precomputed standard bcrypt hash for default seeding ('password123')
+const DEFAULT_PASSWORD_HASH = '$2b$10$L9f9Lig0UOY6RNrx.TWalukMMWnwiWv.y7e5fYNyyuD14tVG5LraK';
+
+// Robust random fallback for bcrypt in Cloudflare Worker & edge runtime
+if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
+  bcrypt.setRandomFallback((len: number) => {
+    const buf = new Uint8Array(len);
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+      globalThis.crypto.getRandomValues(buf);
+    } else {
+      for (let i = 0; i < len; i++) {
+        buf[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    return Array.from(buf);
+  });
+}
 import { 
   getFirestoreDb, 
   loadStateFromFirestore, 
@@ -468,7 +486,7 @@ const PRESEEDED_ADMINS: any[] = [
     status: 'Active',
     joiningDate: '2023-01-01',
     profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-    password: bcrypt.hashSync('password123', 10),
+    password: DEFAULT_PASSWORD_HASH,
     permissions: ['*']
   }
 ];
@@ -1696,7 +1714,7 @@ function initDatabase() {
   if (dbState.customers.length === 0) {
     dbState.customers = dbState.users.filter(u => u.role === UserRole.USER).map(u => ({
       ...u,
-      password: u.password || bcrypt.hashSync('password123', 10),
+      password: u.password || DEFAULT_PASSWORD_HASH,
       country: 'India',
       state: 'Maharashtra',
       city: 'Mumbai',
@@ -1710,7 +1728,7 @@ function initDatabase() {
   if (dbState.admins.length === 0) {
     dbState.admins = dbState.users.filter(u => u.role !== UserRole.USER).map(u => ({
       ...u,
-      password: u.password || bcrypt.hashSync('password123', 10),
+      password: u.password || DEFAULT_PASSWORD_HASH,
       employeeId: `EMP-${u.id.replace(/\D/g, '') || Math.floor(100 + Math.random() * 900)}`,
       department: (u.role as string) === 'SUPER_ADMIN' ? 'Executive' : u.role === UserRole.ADMIN ? 'Management' : 'Operations',
       status: 'Active',
@@ -1734,12 +1752,12 @@ function initDatabase() {
   // Ensure all users have a hashed password in memory if missing
   dbState.customers.forEach((cust: any) => {
     if (!cust.password) {
-      cust.password = bcrypt.hashSync('password123', 10);
+      cust.password = DEFAULT_PASSWORD_HASH;
     }
   });
   dbState.admins.forEach((adm: any) => {
     if (!adm.password) {
-      adm.password = bcrypt.hashSync('password123', 10);
+      adm.password = DEFAULT_PASSWORD_HASH;
     }
   });
 
@@ -2165,7 +2183,7 @@ function normalizeDatabaseRelationships() {
     deepak.status = 'Active';
     deepak.permissions = ['*'];
     if (!deepak.password || typeof deepak.password !== 'string' || (!deepak.password.startsWith('$2a$') && !deepak.password.startsWith('$2b$'))) {
-      deepak.password = bcrypt.hashSync('password123', 10);
+      deepak.password = DEFAULT_PASSWORD_HASH;
     }
   }
 
@@ -2198,7 +2216,7 @@ function normalizeDatabaseRelationships() {
   if (Array.isArray(dbState.customers)) {
     dbState.customers.forEach((cust: any) => {
       if (!cust.password || typeof cust.password !== 'string' || cust.password.trim() === '' || (!cust.password.startsWith('$2a$') && !cust.password.startsWith('$2b$'))) {
-        cust.password = bcrypt.hashSync(cust.password || 'password123', 10);
+        cust.password = DEFAULT_PASSWORD_HASH;
       }
       if (cust.isVerified === undefined) cust.isVerified = true;
     });
@@ -2948,7 +2966,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
         status: accEntry.status === 'Active' ? 'Active' : ((emp as any)?.status || emp?.employmentStatus || 'Active'),
         joiningDate: emp?.joiningDate || new Date().toISOString(),
         profileImage: emp?.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-        password: accEntry.password || bcrypt.hashSync('password123', 10),
+        password: accEntry.password || DEFAULT_PASSWORD_HASH,
         permissions: accEntry.permissions || []
       };
     }
@@ -2972,7 +2990,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
       status: 'Active',
       joiningDate: '2023-01-01',
       profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-      password: bcrypt.hashSync('password123', 10),
+      password: DEFAULT_PASSWORD_HASH,
       permissions: ['*']
     };
     dbState.admins = [admin, ...dbState.admins];
