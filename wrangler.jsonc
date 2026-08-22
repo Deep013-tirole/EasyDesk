@@ -6,6 +6,9 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "alias": {
+    "iconv-lite": "./src/shims/iconv-lite.cjs"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
