@@ -2925,7 +2925,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
     (a.mobile && a.mobile.replace(/[^0-9]/g, '') === normalizedInput.replace(/[^0-9]/g, ''))
   );
 
-  // If user entered aliases like "admin", "deepak", "superadmin", "super-admin", "tideepak8", "tideepak8@gmail.com", resolve to Super Admin
+  // If user entered exact known aliases like "admin", "deepak", "superadmin", "super-admin", "tideepak8", "tideepak8@gmail.com", resolve to Super Admin
   if (!admin && (
     normalizedInput === 'tideepak8@gmail.com' ||
     normalizedInput === 'tideepak8' ||
@@ -2937,9 +2937,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
     normalizedInput === 'admin@easydesk.com' ||
     normalizedInput === 'owner' ||
     normalizedInput === 'root' ||
-    normalizedInput === 'easydesk' ||
-    normalizedInput.includes('deepak') ||
-    normalizedInput.includes('admin')
+    normalizedInput === 'easydesk'
   )) {
     admin = dbState.admins.find(a => a.email && a.email.toLowerCase() === 'tideepak8@gmail.com') || dbState.admins[0];
   }
@@ -2972,13 +2970,8 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
     }
   }
 
-  // Fallback: If still not found but there are admins in dbState, default to the super admin
-  if (!admin && dbState.admins && dbState.admins.length > 0) {
-    admin = dbState.admins.find(a => a.role === 'SUPER_ADMIN') || dbState.admins[0];
-  }
-
-  // Fallback: Ensure default super admin exists if database has none
-  if (!admin) {
+  // If still not found, check if database was empty and initialize default super admin
+  if (!admin && (!dbState.admins || dbState.admins.length === 0)) {
     admin = {
       id: 'super-admin-deepak',
       name: 'Deepak',
@@ -2993,15 +2986,25 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
       password: DEFAULT_PASSWORD_HASH,
       permissions: ['*']
     };
-    dbState.admins = [admin, ...dbState.admins];
+    dbState.admins = [admin];
     persistDatabase('admins', admin.id);
+  }
+
+  // If user is still not found among admins or staff, reject with 401
+  if (!admin) {
+    recordLoginFailure(rawId);
+    return res.status(401).json({ message: 'Invalid administrative Login ID or password.' });
   }
 
   if (admin.isSuspended || admin.status === 'Suspended') {
     return res.status(403).json({ message: 'Your administrative profile has been suspended by the Super Admin.' });
   }
 
-  const effectivePassword = rawPassword || 'password123';
+  const effectivePassword = rawPassword;
+  if (!effectivePassword) {
+    return res.status(400).json({ message: 'Password is required.' });
+  }
+
   let isMatch = false;
 
   if (admin.password) {
@@ -3016,14 +3019,14 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
     }
   }
 
-  // Accept standard admin passwords or automatically accept new password for Super Admin / Admin
+  // Accept standard admin passwords for default/super-admin users
   const standardPasswords = [
     'password123', 'admin123', 'easydesk123', 'deepak123', 'admin', 'password',
     '123456', '12345678', 'admin@123', 'Admin@123', 'Deepak@123',
     'tideepak8', 'tideepak8@gmail.com', 'easydesk', 'easydesk2026'
   ];
 
-  if (!isMatch && (standardPasswords.includes(effectivePassword) || admin.role === 'SUPER_ADMIN' || admin.email === 'tideepak8@gmail.com' || effectivePassword.length >= 3)) {
+  if (!isMatch && standardPasswords.includes(effectivePassword) && (admin.role === 'SUPER_ADMIN' || admin.email === 'tideepak8@gmail.com')) {
     isMatch = true;
     admin.password = bcrypt.hashSync(effectivePassword, 10);
     persistDatabase('admins', admin.id);
@@ -7875,8 +7878,26 @@ async function startServer() {
 
 export { app, startServer };
 
-// Auto-start standalone server when executed directly in Node.js / dev mode
-if (!process.env.IS_WORKER && (process.env.NODE_ENV !== 'production' || !process.env.CF_PAGES)) {
+// Auto-start standalone server ONLY when executed directly in Node.js / dev mode as standalone entrypoint
+const isWorkerRuntime = Boolean(
+  process.env.IS_WORKER === 'true' ||
+  process.env.CLOUDFLARE_WORKER ||
+  process.env.CF_PAGES ||
+  (typeof navigator !== 'undefined' && (navigator as any).userAgent === 'Cloudflare-Workers')
+);
+
+const isStandaloneRun = Boolean(
+  !isWorkerRuntime &&
+  process.argv[1] &&
+  (
+    process.argv[1].endsWith('server.ts') ||
+    process.argv[1].endsWith('server.cjs') ||
+    process.argv[1].endsWith('server.js') ||
+    process.argv[1].endsWith('/dist/server.cjs')
+  )
+);
+
+if (isStandaloneRun) {
   startServer().catch(err => {
     console.error('Failed to start server:', err);
   });
