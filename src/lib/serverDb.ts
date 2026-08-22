@@ -1,7 +1,11 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, setLogLevel } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
+
+try {
+  setLogLevel('error');
+} catch {}
 
 let firestoreInstance: ReturnType<typeof getFirestore> | null = null;
 

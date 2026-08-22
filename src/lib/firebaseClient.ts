@@ -11,7 +11,7 @@ import {
   updateProfile,
   User as FirebaseUser
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, setLogLevel } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -25,7 +25,29 @@ const firebaseConfig = {
 
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
-export const db = getFirestore(app, config.firestoreDatabaseId || '(default)');
+
+// Suppress transient offline/retry logs in the browser console
+try {
+  setLogLevel('error');
+} catch {}
+
+function createFirestoreInstance() {
+  const databaseId = config.firestoreDatabaseId || '(default)';
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
+    }, databaseId);
+  } catch (e) {
+    try {
+      return getFirestore(app, databaseId);
+    } catch {
+      return getFirestore(app);
+    }
+  }
+}
+
+export const db = createFirestoreInstance();
 export const googleProvider = new GoogleAuthProvider();
 
 export {
