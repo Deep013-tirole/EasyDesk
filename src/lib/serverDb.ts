@@ -69,6 +69,7 @@ export const ENTITY_COLLECTIONS = [
   'users',
   'auditLogs',
   'masterData',
+  'coupons',
 ] as const;
 
 // Settings document keys stored inside the 'settings' Firestore collection

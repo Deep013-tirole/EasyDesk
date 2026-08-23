@@ -161,9 +161,11 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], (req, res) => {
           base64 = parts[1];
         }
         const buffer = Buffer.from(base64, 'base64');
-        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-        fs.writeFileSync(targetPath, buffer);
-        console.log(`[STORAGE] Reconstructed missing media file from database: ${targetPath}`);
+        try {
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+          fs.writeFileSync(targetPath, buffer);
+        } catch (diskErr) {}
+        console.log(`[STORAGE] Reconstructed missing media file from database: ${filename}`);
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Length', buffer.length.toString());
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -201,8 +203,10 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], (req, res) => {
           base64 = parts[1];
         }
         const buffer = Buffer.from(base64, 'base64');
-        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-        fs.writeFileSync(targetPath, buffer);
+        try {
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+          fs.writeFileSync(targetPath, buffer);
+        } catch (diskErr) {}
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Length', buffer.length.toString());
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -243,8 +247,10 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], (req, res) => {
             base64 = parts[1];
           }
           const buffer = Buffer.from(base64, 'base64');
-          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-          fs.writeFileSync(targetPath, buffer);
+          try {
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+            fs.writeFileSync(targetPath, buffer);
+          } catch (diskErr) {}
           res.setHeader('Content-Type', mimeType);
           res.setHeader('Content-Length', buffer.length.toString());
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -2165,52 +2171,36 @@ function normalizeDatabaseRelationships() {
     }
   }
 
-  // 5. Normalize and Seed Admins - Strictly ONLY Super Admin Deepak
+  // 5. Normalize and Seed Admins - Preserve all custom admins and updated passwords
   if (!Array.isArray(dbState.admins)) {
     dbState.admins = [];
   }
 
-  // Completely purge all other admin profiles from dbState.admins
-  dbState.admins = dbState.admins.filter(a => a.email && a.email.toLowerCase() === 'tideepak8@gmail.com');
-
   if (dbState.admins.length === 0) {
     dbState.admins.push({ ...PRESEEDED_ADMINS[0] });
   } else {
-    const deepak = dbState.admins[0];
-    deepak.id = deepak.id || 'super-admin-deepak';
-    deepak.name = deepak.name || 'Deepak';
-    deepak.email = deepak.email || 'tideepak8@gmail.com';
-    deepak.role = 'SUPER_ADMIN' as any;
-    deepak.status = 'Active';
-    deepak.permissions = ['*'];
-    if (!deepak.password || typeof deepak.password !== 'string' || (!deepak.password.startsWith('$2a$') && !deepak.password.startsWith('$2b$'))) {
-      deepak.password = DEFAULT_PASSWORD_HASH;
-    }
-  }
-
-  // Purge any non-Deepak admin from dbState.users
-  if (Array.isArray(dbState.users)) {
-    dbState.users = dbState.users.filter(u => u.role === UserRole.USER || (u.email && u.email.toLowerCase() === 'tideepak8@gmail.com'));
-    if (!dbState.users.some(u => u.email && u.email.toLowerCase() === 'tideepak8@gmail.com')) {
-      dbState.users.push({
-        id: 'super-admin-deepak',
-        name: 'Deepak',
-        email: 'tideepak8@gmail.com',
-        mobile: '9999999999',
-        role: 'SUPER_ADMIN' as any,
-        createdAt: new Date().toISOString()
-      });
-    }
-  }
-
-  // Ensure employeeAccounts do not contain other admin roles
-  if (dbState.employeeAccounts) {
-    Object.keys(dbState.employeeAccounts).forEach(key => {
-      const acc = dbState.employeeAccounts[key];
-      if (acc.systemEmail && acc.systemEmail.toLowerCase() !== 'tideepak8@gmail.com') {
-        delete dbState.employeeAccounts[key];
+    dbState.admins.forEach((admin: any) => {
+      admin.id = admin.id || `admin-${Date.now()}`;
+      admin.name = admin.name || 'Admin User';
+      admin.role = admin.role || 'ADMIN';
+      admin.status = admin.status || 'Active';
+      if (!admin.permissions || !Array.isArray(admin.permissions)) {
+        admin.permissions = admin.role === 'SUPER_ADMIN' ? ['*'] : [];
+      }
+      if (!admin.password || typeof admin.password !== 'string' || admin.password.trim() === '') {
+        admin.password = DEFAULT_PASSWORD_HASH;
       }
     });
+  }
+
+  // Ensure default super admin exists if list somehow doesn't have a super admin
+  if (!dbState.admins.some((a: any) => a.role === 'SUPER_ADMIN')) {
+    dbState.admins.unshift({ ...PRESEEDED_ADMINS[0] });
+  }
+
+  // Ensure users list is an array
+  if (!Array.isArray(dbState.users)) {
+    dbState.users = [];
   }
 
   // Ensure every customer in dbState.customers has a valid bcrypt password
@@ -2848,7 +2838,7 @@ app.post('/api/auth/firebase-verify', async (req, res) => {
     dbState.refreshTokens.push({ token: refreshToken, userId: admin.id, createdAt: new Date().toISOString() });
 
     addAuditLog(admin.id, admin.name, admin.role, 'FIREBASE_AUTH_ADMIN_LOGIN', 'Admin authenticated via Firebase Auth SDK.');
-    persistDatabase();
+    await persistDatabase('admins', admin.id);
 
     const { password: _, ...safeAdmin } = admin;
     return res.json({
@@ -2900,7 +2890,7 @@ app.post('/api/auth/firebase-verify', async (req, res) => {
     addAuditLog(customer.id, customer.name, 'USER', 'FIREBASE_AUTH_LOGIN', 'Customer authenticated via Firebase Auth SDK.');
   }
 
-  persistDatabase();
+  await persistDatabase('customers', customer.id);
 
   const jwtSecret = dbState.settings?.jwtSecret || 'easydesk_super_secret_jwt_key_2026';
   const accessToken = jwt.sign(
@@ -2947,7 +2937,7 @@ function getLinkedEmployeeId(adminUser: { id: string; email: string; employeeId?
 }
 
 // Admin Login
-app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
+app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
   const { email, loginId, username, password } = req.body;
   const rawId = (email || loginId || username || '').trim();
   const rawPassword = (password || '').trim();
@@ -3029,7 +3019,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
       permissions: ['*']
     };
     dbState.admins = [admin];
-    persistDatabase('admins', admin.id);
+    await persistDatabase('admins', admin.id);
   }
 
   // If user is still not found among admins or staff, reject with 401
@@ -3059,19 +3049,6 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
     } catch (e) {
       isMatch = false;
     }
-  }
-
-  // Accept standard admin passwords for default/super-admin users
-  const standardPasswords = [
-    'password123', 'admin123', 'easydesk123', 'deepak123', 'admin', 'password',
-    '123456', '12345678', 'admin@123', 'Admin@123', 'Deepak@123',
-    'tideepak8', 'tideepak8@gmail.com', 'easydesk', 'easydesk2026'
-  ];
-
-  if (!isMatch && standardPasswords.includes(effectivePassword) && (admin.role === 'SUPER_ADMIN' || admin.email === 'tideepak8@gmail.com')) {
-    isMatch = true;
-    admin.password = bcrypt.hashSync(effectivePassword, 10);
-    persistDatabase('admins', admin.id);
   }
 
   if (!isMatch) {
@@ -3105,7 +3082,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], (req, res) => {
   dbState.refreshTokens.push({ token: refreshToken, userId: admin.id, createdAt: new Date().toISOString() });
 
   addAuditLog(admin.id, admin.name, admin.role, 'ADMIN_LOGIN_SUCCESS', `Administrator successfully authenticated to control board.`);
-  persistDatabase('admins', admin.id);
+  await persistDatabase('admins', admin.id);
 
   const { password: _, ...safeAdmin } = admin;
   res.json({
@@ -3164,15 +3141,15 @@ app.post('/api/auth/admin/refresh', (req, res) => {
 });
 
 // Admin Logout
-app.post('/api/auth/admin/logout', (req, res) => {
+app.post('/api/auth/admin/logout', async (req, res) => {
   const { refreshToken } = req.body;
   dbState.refreshTokens = dbState.refreshTokens.filter(t => t.token !== refreshToken);
-  persistDatabase();
+  await persistDatabase();
   res.json({ message: 'Administrative logout successful.' });
 });
 
 // Admin Forgot Password
-app.post('/api/auth/admin/forgot-password', (req, res) => {
+app.post('/api/auth/admin/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email address is required.' });
 
@@ -3185,7 +3162,7 @@ app.post('/api/auth/admin/forgot-password', (req, res) => {
   admin.passwordResetOtp = otp;
 
   addAuditLog(admin.id, admin.name, admin.role, 'ADMIN_FORGOT_PASSWORD', `Password reset OTP dispatched: ${otp}`);
-  persistDatabase();
+  await persistDatabase('admins', admin.id);
 
   res.json({
     message: 'An administrative security recovery OTP has been dispatched.',
@@ -3195,7 +3172,7 @@ app.post('/api/auth/admin/forgot-password', (req, res) => {
 });
 
 // Admin Reset Password
-app.post('/api/auth/admin/reset-password', (req, res) => {
+app.post('/api/auth/admin/reset-password', async (req, res) => {
   const { email, otp, password } = req.body;
   if (!email || !otp || !password) {
     return res.status(400).json({ message: 'All parameters are required.' });
@@ -3214,7 +3191,7 @@ app.post('/api/auth/admin/reset-password', (req, res) => {
   admin.passwordResetOtp = undefined;
 
   addAuditLog(admin.id, admin.name, admin.role, 'ADMIN_RESET_PASSWORD_SUCCESS', 'Administrative password reset successfully completed.');
-  persistDatabase('admins', admin.id);
+  await persistDatabase('admins', admin.id);
 
   res.json({ message: 'Administrative password successfully reset.' });
 });
@@ -3233,7 +3210,7 @@ app.get('/api/admin/team', authenticateToken, requirePermission(['staff_accounts
 });
 
 // Create administrative team member
-app.post('/api/admin/team', authenticateToken, requirePermission('staff_accounts.manage'), (req, res) => {
+app.post('/api/admin/team', authenticateToken, requirePermission('staff_accounts.manage'), async (req, res) => {
   const { name, email, mobile, employeeId, department, role, permissions, password, profileImage } = req.body;
 
   if (!name || !email || !mobile || !employeeId || !department || !role || !permissions || !password) {
@@ -3281,14 +3258,14 @@ app.post('/api/admin/team', authenticateToken, requirePermission('staff_accounts
   });
 
   addAuditLog((req as any).user.id, (req as any).user.name, (req as any).user.role, 'TEAM_MEMBER_CREATED', `Created new administrative team member ${name} as ${role} in ${department}.`);
-  persistDatabase();
+  await persistDatabase('admins', newMember.id);
 
   const { password: _, ...safeMember } = newMember;
   res.status(201).json(safeMember);
 });
 
 // Update administrative team member
-app.put('/api/admin/team', authenticateToken, requirePermission('staff_accounts.manage'), (req, res) => {
+app.put('/api/admin/team', authenticateToken, requirePermission('staff_accounts.manage'), async (req, res) => {
   const { id, name, email, mobile, department, role, permissions, status } = req.body;
   const currentUserId = (req as any).user?.id;
 
@@ -3347,14 +3324,14 @@ app.put('/api/admin/team', authenticateToken, requirePermission('staff_accounts.
   }
 
   addAuditLog((req as any).user.id, (req as any).user.name, (req as any).user.role, 'TEAM_MEMBER_UPDATED', `Updated configuration profile for team member ${dbState.admins[adminIndex].name}.`);
-  persistDatabase();
+  await persistDatabase('admins', dbState.admins[adminIndex].id);
 
   const { password: _, ...safeMember } = dbState.admins[adminIndex];
   res.json(safeMember);
 });
 
 // Delete administrative team member
-app.delete('/api/admin/team/:id', authenticateToken, requirePermission('staff_accounts.manage'), (req, res) => {
+app.delete('/api/admin/team/:id', authenticateToken, requirePermission('staff_accounts.manage'), async (req, res) => {
   const id = req.params.id;
   const currentUserId = (req as any).user?.id;
 
@@ -3378,13 +3355,13 @@ app.delete('/api/admin/team/:id', authenticateToken, requirePermission('staff_ac
   dbState.users = dbState.users.filter(u => u.id !== id);
 
   addAuditLog((req as any).user.id, (req as any).user.name, (req as any).user.role, 'TEAM_MEMBER_DELETED', `Permanently deleted administrative team member ${admin.name}.`);
-  persistDatabase();
+  await persistDatabase('admins', id);
 
   res.json({ message: 'Team member deleted successfully.' });
 });
 
 // General password change for logged-in profile
-app.post('/api/auth/change-password', authenticateToken, (req, res) => {
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   const reqUser = (req as any).user;
   if (!newPassword) return res.status(400).json({ message: 'Missing parameters' });
@@ -3403,7 +3380,7 @@ app.post('/api/auth/change-password', authenticateToken, (req, res) => {
   userObj.password = bcrypt.hashSync(newPassword, 10);
 
   addAuditLog(userObj.id, userObj.name, userObj.role, 'PASSWORD_CHANGE', 'User changed password via dashboard profile configuration.');
-  persistDatabase();
+  await persistDatabase(userObj.role === UserRole.USER ? 'customers' : 'admins', userObj.id);
 
   res.json({ message: 'Password changed successfully.' });
 });
@@ -3412,11 +3389,14 @@ app.post('/api/auth/change-password', authenticateToken, (req, res) => {
 app.use('/api/admin', authenticateToken);
 
 // Admin Profile Update & Password Change
-app.post('/api/admin/profile', (req, res) => {
-  const reqUser = (req as any).user;
-  const { name, email, currentPassword, newPassword, confirmPassword } = req.body;
+app.post('/api/admin/profile', async (req, res) => {
+  const reqUser = (req as any).user || (req.body.email ? dbState.admins.find(a => a.email.toLowerCase() === String(req.body.email).toLowerCase()) : null) || dbState.admins[0];
+  const { name, email, currentPassword, newPassword, confirmPassword } = req.body || {};
 
-  const admin = dbState.admins.find(a => a.id === reqUser.id || a.email.toLowerCase() === reqUser.email.toLowerCase());
+  const admin = dbState.admins.find(a => 
+    (reqUser && (a.id === reqUser.id || a.email.toLowerCase() === String(reqUser.email || '').toLowerCase())) || 
+    (email && a.email.toLowerCase() === String(email).trim().toLowerCase())
+  );
   if (!admin) {
     return res.status(404).json({ message: 'Admin account not found.' });
   }
@@ -3466,7 +3446,7 @@ app.post('/api/admin/profile', (req, res) => {
     dbState.users[uIdx].email = admin.email;
   }
 
-  persistDatabase('admins', admin.id);
+  await persistDatabase('admins', admin.id);
 
   const safeUser = {
     id: admin.id,
@@ -3590,7 +3570,7 @@ app.get('/api/orders', (req, res) => {
   res.json([]);
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const { 
     userId, customerId, serviceId, name, mobile, email, address, city, state, pinCode, 
     additionalNotes, paymentMethod, couponCode, uploadedDocs, utr, paymentScreenshot, paymentDate 
@@ -3697,7 +3677,7 @@ app.post('/api/orders', (req, res) => {
     });
   }
 
-  persistDatabase();
+  await persistDatabase('orders', newOrder.id);
   res.status(201).json(newOrder);
 });
 
@@ -3771,7 +3751,7 @@ app.get('/api/orders/track', (req, res) => {
 });
 
 // Update Order Status (Admin/Staff)
-app.patch('/api/orders/:id/status', (req, res) => {
+app.patch('/api/orders/:id/status', async (req, res) => {
   const { status, comment, staffId } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
@@ -3804,12 +3784,12 @@ app.patch('/api/orders/:id/status', (req, res) => {
     });
   }
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json(order);
 });
 
 // Update Payment Status
-app.patch('/api/orders/:id/payment', (req, res) => {
+app.patch('/api/orders/:id/payment', async (req, res) => {
   const { paymentStatus } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
@@ -3819,12 +3799,12 @@ app.patch('/api/orders/:id/payment', (req, res) => {
 
   order.paymentStatus = paymentStatus as PaymentStatus;
   
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json(order);
 });
 
 // Upload dynamic files to order
-app.post('/api/orders/:id/upload', (req, res) => {
+app.post('/api/orders/:id/upload', async (req, res) => {
   const { docName } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
@@ -3846,12 +3826,12 @@ app.post('/api/orders/:id/upload', (req, res) => {
     timestamp: new Date().toISOString()
   });
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json(order);
 });
 
 // Update Document Delivery & WhatsApp Tracking (Admin/Staff)
-app.patch('/api/orders/:id/delivery', (req, res) => {
+app.patch('/api/orders/:id/delivery', async (req, res) => {
   const { finalDocumentUrl, finalDocumentName, markSentWhatsApp, whatsAppDeliveryNotes } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
@@ -3879,12 +3859,12 @@ app.patch('/api/orders/:id/delivery', (req, res) => {
     });
   }
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json(order);
 });
 
 // Explicit Admin Final Document Upload Route
-app.post('/api/admin/orders/:id/final-document', (req, res) => {
+app.post('/api/admin/orders/:id/final-document', async (req, res) => {
   const { finalDocumentUrl, finalDocumentName } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
   if (!order) return res.status(404).json({ message: 'Order not found.' });
@@ -3900,11 +3880,11 @@ app.post('/api/admin/orders/:id/final-document', (req, res) => {
     timestamp: new Date().toISOString()
   });
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: 'Final document attached successfully.', order });
 });
 
-app.put('/api/admin/orders/:id/final-document', (req, res) => {
+app.put('/api/admin/orders/:id/final-document', async (req, res) => {
   const { finalDocumentUrl, finalDocumentName } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
   if (!order) return res.status(404).json({ message: 'Order not found.' });
@@ -3915,12 +3895,12 @@ app.put('/api/admin/orders/:id/final-document', (req, res) => {
   order.finalDocumentUploadedAt = new Date().toISOString();
   order.documentDeliveryStatus = 'Ready';
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: 'Final document updated successfully.', order });
 });
 
 // Explicit Admin WhatsApp Delivery Confirmation Route
-app.patch('/api/admin/orders/:id/whatsapp-delivery', (req, res) => {
+app.patch('/api/admin/orders/:id/whatsapp-delivery', async (req, res) => {
   const { whatsAppDeliveryNotes } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
   if (!order) return res.status(404).json({ message: 'Order not found.' });
@@ -3934,7 +3914,7 @@ app.patch('/api/admin/orders/:id/whatsapp-delivery', (req, res) => {
     timestamp: new Date().toISOString()
   });
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: 'WhatsApp delivery recorded successfully.', order });
 });
 
@@ -4078,7 +4058,7 @@ app.get('/api/staff/orders/:id', authenticateToken, (req, res) => {
 });
 
 // Staff Document Verification Endpoint
-app.patch('/api/staff/orders/:id/documents/verify', authenticateToken, (req, res) => {
+app.patch('/api/staff/orders/:id/documents/verify', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { documentName, documentIndex, verificationStatus, rejectionReason } = req.body;
   const reqUser = (req as any).user;
@@ -4140,7 +4120,7 @@ app.patch('/api/staff/orders/:id/documents/verify', authenticateToken, (req, res
     `Updated document "${doc.name}" for order ${order.id} to ${verificationStatus}.`
   );
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: `Document verification status updated to ${verificationStatus}.`, order });
 });
 
@@ -4173,7 +4153,7 @@ app.post('/api/payment-settings', handlePaymentSettingsUpdate);
 app.put('/api/payment-settings', handlePaymentSettingsUpdate);
 
 // Submit / Resubmit Payment Proof for Order
-app.post('/api/orders/:id/submit-payment', (req, res) => {
+app.post('/api/orders/:id/submit-payment', async (req, res) => {
   const { paymentMethod, utr, paymentScreenshot, paymentDate } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
@@ -4212,12 +4192,12 @@ app.post('/api/orders/:id/submit-payment', (req, res) => {
     });
   }
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: 'Payment proof submitted successfully.', order });
 });
 
 // Admin Verify or Reject Payment Proof
-const handleVerifyPaymentRoute = (req: any, res: any) => {
+const handleVerifyPaymentRoute = async (req: any, res: any) => {
   const { action, status, rejectionReason } = req.body;
   const rawAction = (action || status || '').toString().toLowerCase();
   const isApprove = rawAction === 'approve' || rawAction === 'approved' || rawAction === 'verified' || rawAction === 'accept';
@@ -4274,7 +4254,7 @@ const handleVerifyPaymentRoute = (req: any, res: any) => {
     return res.status(400).json({ message: 'Invalid action or status parameter. Pass action: "approve"|"reject" or status: "Verified"|"Rejected".' });
   }
 
-  persistDatabase();
+  await persistDatabase('orders', order.id);
   res.json({ message: `Payment ${actionParam === 'approve' ? 'verified' : 'rejected'} successfully.`, order });
 };
 
@@ -4293,7 +4273,7 @@ app.get('/api/tickets', (req, res) => {
   res.json(userTickets);
 });
 
-app.post('/api/tickets', (req, res) => {
+app.post('/api/tickets', async (req, res) => {
   const { userId, userName, subject, category, message } = req.body;
   if (!userId || !subject || !message) {
     return res.status(400).json({ message: 'Required fields are missing.' });
@@ -4312,11 +4292,11 @@ app.post('/api/tickets', (req, res) => {
   };
 
   dbState.tickets.push(newTicket);
-  persistDatabase();
+  await persistDatabase('tickets', newTicket.id);
   res.status(201).json(newTicket);
 });
 
-app.post('/api/tickets/:id/replies', (req, res) => {
+app.post('/api/tickets/:id/replies', async (req, res) => {
   const { senderId, senderName, senderRole, message } = req.body;
   const ticket = dbState.tickets.find(t => t.id === req.params.id);
 
@@ -4339,7 +4319,7 @@ app.post('/api/tickets/:id/replies', (req, res) => {
     ticket.status = 'Open';
   }
 
-  persistDatabase();
+  await persistDatabase('tickets', ticket.id);
   res.status(201).json(ticket);
 });
 
@@ -4451,7 +4431,7 @@ app.get('/api/reviews/my-reviews', authenticateToken, (req, res) => {
 });
 
 // Reviews API - Submit Customer Review (Public & Authenticated Flow)
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', async (req, res) => {
   const authHeader = req.headers['authorization'];
   let reqUser: any = null;
   const jwtSecret = dbState.settings?.jwtSecret || 'easydesk_super_secret_jwt_key_2026';
@@ -4541,7 +4521,7 @@ app.post('/api/reviews', (req, res) => {
     `Customer submitted review ${reviewId} for order ${newReview.orderId || 'general'} (Pending Approval).`
   );
   
-  persistDatabase('reviews', newReview.id);
+  await persistDatabase('reviews', newReview.id);
 
   res.status(201).json({
     message: 'Thank you for your feedback! Your review has been submitted and is currently pending administrator approval.',
@@ -4905,8 +4885,8 @@ app.get('/api/about', (req, res) => {
   });
 });
 
-app.post(['/api/admin/about', '/api/about'], async (req, res) => {
-  const { aboutUs, updaterId, updaterName, updaterRole } = req.body;
+const handleAboutUpdate = async (req: express.Request, res: express.Response) => {
+  const { aboutUs, updaterId, updaterName, updaterRole } = req.body || {};
   const rawAbout = aboutUs || req.body;
   if (rawAbout && typeof rawAbout === 'object') {
     dbState.aboutUs = { ...(dbState.aboutUs || PRESEEDED_ABOUT_US), ...rawAbout };
@@ -4914,14 +4894,18 @@ app.post(['/api/admin/about', '/api/about'], async (req, res) => {
     await persistDatabase('aboutUs');
   }
   res.json({ message: 'About Us content saved successfully.', aboutUs: dbState.aboutUs });
-});
+};
+app.post('/api/admin/about', handleAboutUpdate);
+app.post('/api/about', handleAboutUpdate);
+app.put('/api/admin/about', handleAboutUpdate);
+app.put('/api/about', handleAboutUpdate);
 
 app.get('/api/founder', (req, res) => {
   res.json(dbState.founder || PRESEEDED_FOUNDER);
 });
 
-app.post(['/api/admin/founder', '/api/founder'], async (req, res) => {
-  const { founder, updaterId, updaterName, updaterRole } = req.body;
+const handleFounderUpdate = async (req: express.Request, res: express.Response) => {
+  const { founder, updaterId, updaterName, updaterRole } = req.body || {};
   const rawFounder = founder || req.body;
   if (rawFounder && typeof rawFounder === 'object') {
     const updatedFounder = { ...(dbState.founder || PRESEEDED_FOUNDER), ...rawFounder };
@@ -4963,14 +4947,23 @@ app.post(['/api/admin/founder', '/api/founder'], async (req, res) => {
       } catch (e) {
         console.error('Error saving founder signature:', e);
       }
+    } else if (updatedFounder.signatureUrl && updatedFounder.signatureUrl.startsWith('/uploads/')) {
+      const matched = (dbState.media || []).find((m: any) => m.url === updatedFounder.signatureUrl || (m.storedFileName && updatedFounder.signatureUrl.endsWith(m.storedFileName)));
+      if (matched && ((matched as any).fileData || (matched as any).base64)) {
+        updatedFounder.signatureData = (matched as any).fileData || (matched as any).base64;
+      }
     }
 
-    dbState.founder = { ...dbState.founder, ...updatedFounder };
-    logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'FOUNDER_UPDATE', 'Updated Founder profile information.');
+    dbState.founder = updatedFounder;
+    logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'FOUNDER_UPDATE', 'Updated Founder profile.');
     await persistDatabase('founder');
   }
   res.json({ message: 'Founder profile saved successfully.', founder: dbState.founder });
-});
+};
+app.post('/api/admin/founder', handleFounderUpdate);
+app.post('/api/founder', handleFounderUpdate);
+app.put('/api/admin/founder', handleFounderUpdate);
+app.put('/api/founder', handleFounderUpdate);
 
 // Public aggregate team statistics API
 app.get('/api/about/team', (req, res) => {
@@ -5142,8 +5135,12 @@ app.get('/api/admin/assignable-employees', authenticateToken, requirePermission(
 
 // CREATE or UPDATE operational profile
 app.post('/api/admin/employees', authenticateToken, requirePermission(['employees.manage', 'employees.view']), (req, res) => {
-  const body = req.body;
-  const { fullName, designation, department, id, employeeCode } = body;
+  const body = req.body.employee || req.body || {};
+  const fullName = body.fullName || body.name || '';
+  const designation = body.designation || '';
+  const department = body.department || '';
+  const id = body.id;
+  const employeeCode = body.employeeCode;
 
   if (!fullName || !designation || !department) {
     return res.status(400).json({ message: 'Full Name, Designation, and Department are required.' });
@@ -5269,9 +5266,12 @@ app.put('/api/admin/employees/:id', authenticateToken, requirePermission(['emplo
     return res.status(404).json({ message: 'Employee record not found.' });
   }
 
-  const body = req.body || {};
+  const body = req.body.employee || req.body || {};
   const current = dbState.employees[idx];
 
+  const fullName = body.fullName || body.name || current.fullName;
+  const designation = body.designation || current.designation;
+  const department = body.department || current.department;
   const fatherName = body.fatherName !== undefined ? body.fatherName : (current.fatherName || '');
   const motherName = body.motherName !== undefined ? body.motherName : (current.motherName || '');
   const spouseName = body.spouseName !== undefined ? body.spouseName : (current.spouseName || '');
@@ -5788,7 +5788,10 @@ const handleContactSettingsGet = (req: express.Request, res: express.Response) =
   res.json(dbState.contactSettings);
 };
 
-app.get(['/api/contact-settings', '/api/admin/contact-settings', '/api/settings/contact', '/api/admin/settings/contact'], handleContactSettingsGet);
+app.get('/api/contact-settings', handleContactSettingsGet);
+app.get('/api/admin/contact-settings', handleContactSettingsGet);
+app.get('/api/settings/contact', handleContactSettingsGet);
+app.get('/api/admin/settings/contact', handleContactSettingsGet);
 
 const handleContactSettingsUpdate = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
@@ -5821,8 +5824,15 @@ const handleContactSettingsUpdate = async (req: express.Request, res: express.Re
   res.json({ message: 'Contact settings saved successfully.', contactSettings: dbState.contactSettings });
 };
 
-app.post(['/api/admin/contact-settings', '/api/contact-settings', '/api/settings/contact', '/api/admin/settings/contact'], handleContactSettingsUpdate);
-app.put(['/api/admin/contact-settings', '/api/contact-settings', '/api/settings/contact', '/api/admin/settings/contact'], handleContactSettingsUpdate);
+app.post('/api/admin/contact-settings', handleContactSettingsUpdate);
+app.post('/api/contact-settings', handleContactSettingsUpdate);
+app.post('/api/settings/contact', handleContactSettingsUpdate);
+app.post('/api/admin/settings/contact', handleContactSettingsUpdate);
+
+app.put('/api/admin/contact-settings', handleContactSettingsUpdate);
+app.put('/api/contact-settings', handleContactSettingsUpdate);
+app.put('/api/settings/contact', handleContactSettingsUpdate);
+app.put('/api/admin/settings/contact', handleContactSettingsUpdate);
 
 app.post('/api/contact-messages', (req, res) => {
   const { name, email, phone, subject, message } = req.body;
@@ -7055,7 +7065,7 @@ app.get('/api/admin/faqs', (req, res) => {
   res.json(dbState.faqs);
 });
 
-app.post('/api/admin/faqs', (req, res) => {
+app.post('/api/admin/faqs', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const faq = req.body.faq || req.body;
   if (!faq || !faq.question || !faq.answer) return res.status(400).json({ message: 'Question and answer required' });
@@ -7068,28 +7078,28 @@ app.post('/api/admin/faqs', (req, res) => {
   };
   dbState.faqs.push(newFaq);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'FAQ_CREATE', `Created FAQ: ${newFaq.question}`);
-  persistDatabase();
+  await persistDatabase('faqs', newFaq.id);
   res.status(201).json(newFaq);
 });
 
-app.put('/api/admin/faqs/:id', (req, res) => {
+app.put('/api/admin/faqs/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const faq = req.body.faq || req.body;
   const idx = dbState.faqs.findIndex(f => f.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'FAQ not found' });
   dbState.faqs[idx] = { ...dbState.faqs[idx], ...faq };
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'FAQ_UPDATE', `Updated FAQ: ${dbState.faqs[idx].question}`);
-  persistDatabase();
+  await persistDatabase('faqs', req.params.id);
   res.json(dbState.faqs[idx]);
 });
 
-app.delete('/api/admin/faqs/:id', (req, res) => {
+app.delete('/api/admin/faqs/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const faq = dbState.faqs.find(f => f.id === req.params.id);
   if (!faq) return res.status(404).json({ message: 'FAQ not found' });
   dbState.faqs = dbState.faqs.filter(f => f.id !== req.params.id);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'FAQ_DELETE', `Deleted FAQ: ${faq.question}`);
-  persistDatabase();
+  await persistDatabase('faqs', req.params.id);
   res.json({ message: 'FAQ deleted' });
 });
 
@@ -7101,7 +7111,7 @@ app.get('/api/admin/reviews', (req, res) => {
   res.json(dbState.reviews || []);
 });
 
-app.post('/api/admin/reviews', (req, res) => {
+app.post('/api/admin/reviews', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const review = req.body.review || req.body;
   if (!review || (!review.customerName && !review.userName) || (!review.reviewText && !review.comment)) {
@@ -7143,11 +7153,11 @@ app.post('/api/admin/reviews', (req, res) => {
 
   dbState.reviews.push(newRev);
   logSystemAction(updaterId || 'admin-1', updaterName || 'Admin', updaterRole || 'ADMIN', 'REVIEW_CREATE', `Created review entry ${reviewId} for ${newRev.customerName}`);
-  persistDatabase('reviews', newRev.id);
+  await persistDatabase('reviews', newRev.id);
   res.status(201).json(newRev);
 });
 
-const handleReviewStatusUpdate = (req: express.Request, res: express.Response) => {
+const handleReviewStatusUpdate = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole, status, adminNote } = req.body || {};
   const validStatuses = ['Pending', 'Approved', 'Rejected', 'Hidden'];
 
@@ -7179,7 +7189,7 @@ const handleReviewStatusUpdate = (req: express.Request, res: express.Response) =
     'REVIEW_STATUS_UPDATE',
     `Updated status of review ${req.params.id} to ${status}${adminNote ? ` (Note: ${adminNote})` : ''}`
   );
-  persistDatabase('reviews', req.params.id);
+  await persistDatabase('reviews', req.params.id);
 
   res.json({ message: `Review status updated to ${status}.`, review: dbState.reviews[idx] });
 };
@@ -7187,7 +7197,7 @@ const handleReviewStatusUpdate = (req: express.Request, res: express.Response) =
 app.patch('/api/admin/reviews/:id/status', handleReviewStatusUpdate);
 app.put('/api/admin/reviews/:id/status', handleReviewStatusUpdate);
 
-app.put('/api/admin/reviews/:id', (req, res) => {
+app.put('/api/admin/reviews/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const review = req.body.review || req.body;
   const idx = dbState.reviews.findIndex(r => r.id === req.params.id);
@@ -7238,18 +7248,18 @@ app.put('/api/admin/reviews/:id', (req, res) => {
     `Updated review ${existing.id} (${customerName}) - Rating: ${rating}, Status: ${status}`
   );
   
-  persistDatabase('reviews', existing.id);
+  await persistDatabase('reviews', existing.id);
   res.json(dbState.reviews[idx]);
 });
 
-app.delete('/api/admin/reviews/:id', (req, res) => {
+app.delete('/api/admin/reviews/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const rev = dbState.reviews.find(r => r.id === req.params.id);
   if (!rev) return res.status(404).json({ message: 'Review not found' });
 
   dbState.reviews = dbState.reviews.filter(r => r.id !== req.params.id);
   logSystemAction(updaterId || 'admin-1', updaterName || 'Admin', updaterRole || 'ADMIN', 'REVIEW_DELETE', `Deleted review of ${rev.customerName || rev.userName}`);
-  persistDatabase('reviews', req.params.id);
+  await persistDatabase('reviews', req.params.id);
   res.json({ message: 'Review deleted successfully' });
 });
 
@@ -7258,7 +7268,7 @@ app.get('/api/admin/banners', (req, res) => {
   res.json(dbState.banners);
 });
 
-app.post('/api/admin/banners', (req, res) => {
+app.post('/api/admin/banners', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const banner = req.body.banner || req.body;
   if (!banner || !banner.title || !banner.imageUrl) return res.status(400).json({ message: 'Title and imageUrl are required' });
@@ -7272,28 +7282,28 @@ app.post('/api/admin/banners', (req, res) => {
   };
   dbState.banners.push(newBanner);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'BANNER_CREATE', `Created banner campaign: ${newBanner.title}`);
-  persistDatabase();
+  await persistDatabase('banners', newBanner.id);
   res.status(201).json(newBanner);
 });
 
-app.put('/api/admin/banners/:id', (req, res) => {
+app.put('/api/admin/banners/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const banner = req.body.banner || req.body;
   const idx = dbState.banners.findIndex(b => b.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Banner not found' });
   dbState.banners[idx] = { ...dbState.banners[idx], ...banner };
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'BANNER_UPDATE', `Updated banner campaign: ${dbState.banners[idx].title}`);
-  persistDatabase();
+  await persistDatabase('banners', req.params.id);
   res.json(dbState.banners[idx]);
 });
 
-app.delete('/api/admin/banners/:id', (req, res) => {
+app.delete('/api/admin/banners/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const b = dbState.banners.find(x => x.id === req.params.id);
   if (!b) return res.status(404).json({ message: 'Banner not found' });
   dbState.banners = dbState.banners.filter(x => x.id !== req.params.id);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'BANNER_DELETE', `Deleted banner: ${b.title}`);
-  persistDatabase();
+  await persistDatabase('banners', req.params.id);
   res.json({ message: 'Banner deleted' });
 });
 
@@ -7302,7 +7312,7 @@ app.get('/api/calendar', (req, res) => {
   res.json(dbState.calendarEvents || PRESEEDED_CALENDAR_EVENTS);
 });
 
-app.post('/api/admin/calendar', (req, res) => {
+app.post('/api/admin/calendar', async (req, res) => {
   const { title, date, category, description, link, status } = req.body;
   if (!title || !date || !category) {
     return res.status(400).json({ message: 'Title, date, and category are required.' });
@@ -7319,23 +7329,23 @@ app.post('/api/admin/calendar', (req, res) => {
   };
   if (!dbState.calendarEvents) dbState.calendarEvents = [];
   dbState.calendarEvents.unshift(newEvt);
-  persistDatabase();
+  await persistDatabase('calendarEvents', newEvt.id);
   res.status(201).json(newEvt);
 });
 
-app.put('/api/admin/calendar/:id', (req, res) => {
+app.put('/api/admin/calendar/:id', async (req, res) => {
   if (!dbState.calendarEvents) dbState.calendarEvents = [];
   const idx = dbState.calendarEvents.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Calendar event not found.' });
   dbState.calendarEvents[idx] = { ...dbState.calendarEvents[idx], ...req.body };
-  persistDatabase();
+  await persistDatabase('calendarEvents', req.params.id);
   res.json(dbState.calendarEvents[idx]);
 });
 
-app.delete('/api/admin/calendar/:id', (req, res) => {
+app.delete('/api/admin/calendar/:id', async (req, res) => {
   if (!dbState.calendarEvents) dbState.calendarEvents = [];
   dbState.calendarEvents = dbState.calendarEvents.filter(c => c.id !== req.params.id);
-  persistDatabase();
+  await persistDatabase('calendarEvents', req.params.id);
   res.json({ message: 'Calendar event removed successfully.' });
 });
 
@@ -7344,7 +7354,7 @@ app.get('/api/admin/pages', (req, res) => {
   res.json(dbState.pages);
 });
 
-app.post('/api/admin/pages', (req, res) => {
+app.post('/api/admin/pages', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const page = req.body.page || req.body;
   if (!page || !page.title || !page.content) return res.status(400).json({ message: 'Title and content required' });
@@ -7357,28 +7367,28 @@ app.post('/api/admin/pages', (req, res) => {
   };
   dbState.pages.push(newPage);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'PAGE_CREATE', `Created custom page: ${newPage.title}`);
-  persistDatabase();
+  await persistDatabase('pages', newPage.id);
   res.status(201).json(newPage);
 });
 
-app.put('/api/admin/pages/:id', (req, res) => {
+app.put('/api/admin/pages/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const page = req.body.page || req.body;
   const idx = dbState.pages.findIndex(p => p.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Page not found' });
   dbState.pages[idx] = { ...dbState.pages[idx], ...page };
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'PAGE_UPDATE', `Updated page content: ${dbState.pages[idx].title}`);
-  persistDatabase();
+  await persistDatabase('pages', req.params.id);
   res.json(dbState.pages[idx]);
 });
 
-app.delete('/api/admin/pages/:id', (req, res) => {
+app.delete('/api/admin/pages/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const p = dbState.pages.find(x => x.id === req.params.id);
   if (!p) return res.status(404).json({ message: 'Page not found' });
   dbState.pages = dbState.pages.filter(x => x.id !== req.params.id);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'PAGE_DELETE', `Deleted page: ${p.title}`);
-  persistDatabase();
+  await persistDatabase('pages', req.params.id);
   res.json({ message: 'Page deleted' });
 });
 
@@ -7452,7 +7462,12 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
         });
       }
 
-      fs.writeFileSync(targetPath, buffer);
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, buffer);
+      } catch (fsErr) {
+        // Handled in serverless/worker runtimes where fs is read-only
+      }
 
       let sizeStr = `${(sizeBytes / 1024).toFixed(1)} KB`;
       if (sizeBytes > 1024 * 1024) {
@@ -7608,7 +7623,7 @@ app.get('/api/admin/notifications', (req, res) => {
   res.json(dbState.notifications);
 });
 
-app.post('/api/admin/notifications', (req, res) => {
+app.post('/api/admin/notifications', async (req, res) => {
   const { notification, updaterId, updaterName, updaterRole } = req.body;
   if (!notification || !notification.message) return res.status(400).json({ message: 'Notification message is required' });
   
@@ -7626,15 +7641,15 @@ app.post('/api/admin/notifications', (req, res) => {
   
   const channel = notification.type ? notification.type.toUpperCase() : 'PUSH';
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'NOTIFICATION_SEND', `Sent ${channel} notification alert to ID ${notification.userId || 'All'}. Message: "${notification.message.substring(0, 30)}..."`);
-  persistDatabase();
+  await persistDatabase('notifications', newNotif.id);
   res.status(201).json(newNotif);
 });
 
-app.delete('/api/admin/notifications/:id', (req, res) => {
+app.delete('/api/admin/notifications/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   dbState.notifications = dbState.notifications.filter(x => x.id !== req.params.id);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'NOTIFICATION_DELETE', 'Deleted notification dispatch entry');
-  persistDatabase();
+  await persistDatabase('notifications', req.params.id);
   res.json({ message: 'Notification dispatch deleted' });
 });
 
@@ -7643,7 +7658,7 @@ app.get('/api/admin/users', (req, res) => {
   res.json(dbState.users);
 });
 
-app.post('/api/admin/users', (req, res) => {
+app.post('/api/admin/users', async (req, res) => {
   const { user, updaterId, updaterName, updaterRole } = req.body;
   if (!user || !user.name || !user.email) return res.status(400).json({ message: 'Name and email are required' });
   
@@ -7661,29 +7676,29 @@ app.post('/api/admin/users', (req, res) => {
   };
   dbState.users.push(newUser);
   logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_CREATE', `Created user/admin record: ${newUser.name} with role ${newUser.role}`);
-  persistDatabase();
+  await persistDatabase('users', newUser.id);
   res.status(201).json(newUser);
 });
 
-app.put('/api/admin/users/:id', (req, res) => {
+app.put('/api/admin/users/:id', async (req, res) => {
   const { user, updaterId, updaterName, updaterRole } = req.body;
   const idx = dbState.users.findIndex(u => u.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'User not found' });
   
   dbState.users[idx] = { ...dbState.users[idx], ...user };
   logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_UPDATE', `Updated user/admin profile: ${dbState.users[idx].name} (Role: ${dbState.users[idx].role})`);
-  persistDatabase();
+  await persistDatabase('users', req.params.id);
   res.json(dbState.users[idx]);
 });
 
-app.delete('/api/admin/users/:id', (req, res) => {
+app.delete('/api/admin/users/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const targetUser = dbState.users.find(u => u.id === req.params.id);
   if (!targetUser) return res.status(404).json({ message: 'User not found' });
   
   dbState.users = dbState.users.filter(u => u.id !== req.params.id);
   logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_DELETE', `Permanently deleted user/admin record: ${targetUser.name}`);
-  persistDatabase();
+  await persistDatabase('users', req.params.id);
   res.json({ message: 'User deleted' });
 });
 
