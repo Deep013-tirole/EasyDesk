@@ -5,7 +5,7 @@
  * and guaranteed to persist seamlessly in Firestore and local storage.
  */
 
-export async function compressImageFile(file: File, maxDimension: number = 1600, quality: number = 0.85): Promise<{ base64: string; mimeType: string; fileName: string }> {
+export async function compressImageFile(file: File, maxDimension: number = 1200, quality: number = 0.8): Promise<{ base64: string; mimeType: string; fileName: string }> {
   // Non-images (like PDF or Word documents) are returned as regular base64 without canvas resizing
   if (!file.type.startsWith('image/')) {
     return new Promise((resolve, reject) => {

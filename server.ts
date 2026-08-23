@@ -73,6 +73,18 @@ const PORT = 3000;
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 
+// Middleware to ensure Firestore hydration completes before serving ANY requests
+app.use(async (req, res, next) => {
+  if (req.path !== '/api/health') {
+    try {
+      await ensureDatabaseReady();
+    } catch (e) {
+      console.error('[DB] ensureDatabaseReady middleware error:', e);
+    }
+  }
+  next();
+});
+
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
   const db = getFirestoreDb();
@@ -101,7 +113,8 @@ try {
 }
 
 // Resilient media serving and on-demand reconstruction route for all uploaded files
-app.get(['/uploads/:folder/:filename', '/uploads/:filename'], (req, res) => {
+app.get(['/uploads/:folder/:filename', '/uploads/:filename'], async (req, res) => {
+  await ensureDatabaseReady();
   const folder = req.params.folder || 'media';
   const filename = req.params.filename || req.params.folder;
   const targetPath = path.join(process.cwd(), 'uploads', folder, filename);
@@ -2366,14 +2379,6 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
 
 initDatabase();
 firestoreInitPromise = asyncInitFirestoreDatabase();
-
-// Middleware to ensure Firestore hydration completes before serving API requests
-app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api/') && req.path !== '/api/health') {
-    await ensureDatabaseReady();
-  }
-  next();
-});
 
 // Lazy initialization of Gemini SDK
 let aiClient: GoogleGenAI | null = null;

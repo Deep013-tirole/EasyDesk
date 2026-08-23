@@ -318,7 +318,11 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       settingsPromise,
     ]);
 
-    for (const { collName, items, exists } of entityResults) {
+    for (const { collName, items, exists, success } of entityResults) {
+      if (!success) {
+        console.warn(`[FIREBASE] Skipping collection ${collName} due to fetch error/timeout to prevent data loss.`);
+        continue;
+      }
       if (collName === 'masterData') {
         const masterDoc = items.find((d: any) => d.id === 'data' || d.departments || d.designations) || items[0];
         if (masterDoc) {
@@ -334,7 +338,7 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
         }
         stateFromDb[collName] = map;
       } else {
-        // Authoritative entity collection assignment - even if items is [] so empty collections persist!
+        // Authoritative entity collection assignment
         stateFromDb[collName] = items;
       }
       if (exists) {
