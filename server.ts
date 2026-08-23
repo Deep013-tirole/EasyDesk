@@ -32,7 +32,9 @@ import {
   saveFirestoreDoc, 
   deleteFirestoreDoc, 
   saveFirestoreSetting,
-  sanitizePaymentConfig 
+  sanitizePaymentConfig,
+  ENTITY_COLLECTIONS,
+  SETTING_KEYS
 } from './src/lib/serverDb.js';
 import { 
   validateRecordRelationships, 
@@ -67,7 +69,6 @@ import {
 
 const app = express();
 const PORT = 3000;
-let isFirestoreReady = false;
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));
@@ -2231,12 +2232,37 @@ async function persistDatabase(collectionOrKey?: string, id?: string): Promise<v
   }
 }
 
-async function asyncInitFirestoreDatabase() {
+let isFirestoreReady = false;
+let firestoreInitPromise: Promise<void> | null = null;
+
+export function ensureDatabaseReady(): Promise<void> {
+  if (isFirestoreReady) return Promise.resolve();
+  if (!firestoreInitPromise) {
+    firestoreInitPromise = asyncInitFirestoreDatabase();
+  }
+  return firestoreInitPromise;
+}
+
+async function asyncInitFirestoreDatabase(): Promise<void> {
   try {
-    const firestoreState = await loadStateFromFirestore();
-    if (firestoreState && Object.keys(firestoreState).length > 0) {
-      console.log('[DB] Hydrating dbState from Cloud Firestore (document-per-entity)...');
-      Object.assign(dbState, firestoreState);
+    const result = await loadStateFromFirestore();
+    if (result && !result.isFreshDatabase) {
+      console.log(`[DB] Hydrating dbState from Cloud Firestore (${result.totalDocsLoaded} entity docs loaded)...`);
+      const firestoreState = result.state;
+
+      // Authoritatively assign all entity collections from Firestore (even if empty [])
+      for (const collName of ENTITY_COLLECTIONS) {
+        if (firestoreState[collName] !== undefined) {
+          dbState[collName] = firestoreState[collName];
+        }
+      }
+
+      // Assign settings
+      for (const key of SETTING_KEYS) {
+        if (firestoreState[key] !== undefined) {
+          dbState[key] = firestoreState[key];
+        }
+      }
 
       // Harmonize privacy and security settings
       if (firestoreState.privacySecurity || firestoreState.privacySecuritySettings) {
@@ -2269,8 +2295,8 @@ async function asyncInitFirestoreDatabase() {
 
       // Synchronize users map from loaded admins and customers without overwriting credentials
       const userMap = new Map<string, any>();
-      (dbState.users || []).forEach(u => userMap.set(u.id, u));
-      (dbState.customers || []).forEach(c => userMap.set(c.id, { 
+      (dbState.users || []).forEach((u: any) => userMap.set(u.id, u));
+      (dbState.customers || []).forEach((c: any) => userMap.set(c.id, { 
         id: c.id, 
         name: c.name, 
         email: c.email, 
@@ -2279,7 +2305,7 @@ async function asyncInitFirestoreDatabase() {
         isSuspended: c.isSuspended, 
         password: c.password 
       }));
-      (dbState.admins || []).forEach(a => userMap.set(a.id, { 
+      (dbState.admins || []).forEach((a: any) => userMap.set(a.id, { 
         id: a.id, 
         name: a.name, 
         email: a.email, 
@@ -2322,14 +2348,14 @@ async function asyncInitFirestoreDatabase() {
         // Local cache write error ignored
       }
 
-      console.log('[DB] Successfully hydrated dbState from Cloud Firestore!');
-    } else if (firestoreState && Object.keys(firestoreState).length === 0) {
-      console.log('[DB] Firestore state empty. Seeding current state to Cloud Firestore...');
+      console.log('[DB] Successfully hydrated authoritative production dbState from Cloud Firestore!');
+    } else if (result && result.isFreshDatabase) {
+      console.log('[DB] Virgin Firestore database detected. Seeding initial baseline and system_init sentinel to Cloud Firestore...');
       normalizeDatabaseRelationships();
       await seedFirestoreFromInitialState(dbState);
-      console.log('[DB] Initial document-per-entity state successfully written to Cloud Firestore.');
+      console.log('[DB] Baseline state and system_init sentinel successfully written to Cloud Firestore.');
     } else {
-      console.log('[DB] Firestore offline or unreachable; preserving active local state.');
+      console.log('[DB] Firestore temporarily offline or unreachable; preserving active local state.');
     }
     isFirestoreReady = true;
   } catch (err) {
@@ -2339,16 +2365,12 @@ async function asyncInitFirestoreDatabase() {
 }
 
 initDatabase();
-asyncInitFirestoreDatabase();
+firestoreInitPromise = asyncInitFirestoreDatabase();
 
 // Middleware to ensure Firestore hydration completes before serving API requests
 app.use(async (req, res, next) => {
-  if (!isFirestoreReady && req.path.startsWith('/api/') && req.path !== '/api/health') {
-    let retries = 0;
-    while (!isFirestoreReady && retries < 100) {
-      await new Promise(r => setTimeout(r, 100));
-      retries++;
-    }
+  if (req.path.startsWith('/api/') && req.path !== '/api/health') {
+    await ensureDatabaseReady();
   }
   next();
 });

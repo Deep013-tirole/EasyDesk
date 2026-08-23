@@ -120,7 +120,7 @@ export async function fetchWithCache<T>(
 
     if (res.ok) {
       const data = await safeParseJsonResponse<T>(res);
-      if (data !== null && (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0)) {
+      if (data !== null && data !== undefined) {
         setCachedCatalog(cacheKey, data);
         return { data, isCached: false };
       }
@@ -133,7 +133,7 @@ export async function fetchWithCache<T>(
   if (directFirestoreLoader) {
     try {
       const firestoreData = await directFirestoreLoader();
-      if (firestoreData !== null && (Array.isArray(firestoreData) ? firestoreData.length > 0 : Object.keys(firestoreData).length > 0)) {
+      if (firestoreData !== null && firestoreData !== undefined) {
         setCachedCatalog(cacheKey, firestoreData);
         return { data: firestoreData, isCached: false };
       }

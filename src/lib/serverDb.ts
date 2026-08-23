@@ -74,6 +74,7 @@ export const ENTITY_COLLECTIONS = [
 
 // Settings document keys stored inside the 'settings' Firestore collection
 export const SETTING_KEYS = [
+  'system_init',
   'aboutUs',
   'founder',
   'companyProfile',
@@ -178,8 +179,15 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
   const db = getFirestoreDb();
   if (!db) return;
 
-  console.log('[FIREBASE] Seeding Firestore with document-per-entity structure...');
+  console.log('[FIREBASE] Writing document-per-entity structure to Firestore...');
   const promises: Promise<void>[] = [];
+
+  // Write system initialization sentinel FIRST
+  promises.push(saveFirestoreSetting('system_init', {
+    isInitialized: true,
+    initializedAt: new Date().toISOString(),
+    version: '2.0.0'
+  }));
 
   // Seed entity collections
   for (const collName of ENTITY_COLLECTIONS) {
@@ -205,6 +213,7 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
 
   // Seed settings
   for (const settingKey of SETTING_KEYS) {
+    if (settingKey === 'system_init') continue; // Handled above
     if (settingKey === 'privacySecurity' || settingKey === 'privacySecuritySettings') {
       const privData = dbState.privacySecuritySettings || dbState.privacySecurity;
       if (privData !== undefined) {
@@ -221,7 +230,7 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
   }
 
   await Promise.allSettled(promises);
-  console.log('[FIREBASE] Document-per-entity seeding completed successfully.');
+  console.log('[FIREBASE] Document-per-entity write completed successfully.');
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> {
@@ -231,11 +240,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Prom
   ]);
 }
 
+export interface FirestoreLoadResult {
+  state: Record<string, any>;
+  isFreshDatabase: boolean;
+  totalDocsLoaded: number;
+}
+
 /**
  * Loads entire state from Firestore document-per-entity structure in parallel.
- * Returns null if database is completely empty.
+ * Returns null if Firestore is completely offline or unreachable.
  */
-export async function loadStateFromFirestore(): Promise<Record<string, any> | null> {
+export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | null> {
   const db = getFirestoreDb();
   if (!db) {
     console.warn('[FIREBASE] Firestore unavailable');
@@ -246,7 +261,18 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
     const stateFromDb: Record<string, any> = {};
     let totalDocsLoaded = 0;
 
-    // Load all entity collections in parallel with 8s timeout
+    // 1. Check system_init sentinel
+    let systemInitDoc: any = null;
+    try {
+      const initDocSnap = await withTimeout(getDoc(doc(db, 'settings', 'system_init')), 8000, null);
+      if (initDocSnap && initDocSnap.exists()) {
+        systemInitDoc = initDocSnap.data();
+      }
+    } catch (e) {
+      console.warn('[FIREBASE] Error querying settings/system_init:', e);
+    }
+
+    // 2. Load all entity collections in parallel with 8s timeout
     const entityPromises = ENTITY_COLLECTIONS.map(async (collName) => {
       try {
         const queryPromise = getDocs(collection(db, collName));
@@ -258,12 +284,12 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
             delete data._updatedAt;
             items.push(data);
           });
-          return { collName, items, exists: !querySnapshot.empty };
+          return { collName, items, exists: !querySnapshot.empty, success: true };
         }
       } catch (e) {
         console.error(`[FIREBASE] Error querying collection ${collName}:`, e);
       }
-      return { collName, items: [], exists: false };
+      return { collName, items: [], exists: false, success: false };
     });
 
     const settingsPromise = (async () => {
@@ -278,15 +304,16 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
             delete data._updatedAt;
             settingsMap[key] = data;
           });
-          return settingsMap;
+          return { settingsMap, success: true };
         }
+        return { settingsMap: {}, success: !!settingsSnapshot };
       } catch (e) {
         console.error('[FIREBASE] Error querying settings collection:', e);
+        return { settingsMap: {}, success: false };
       }
-      return {};
     })();
 
-    const [entityResults, settingsResult] = await Promise.all([
+    const [entityResults, settingsRes] = await Promise.all([
       Promise.all(entityPromises),
       settingsPromise,
     ]);
@@ -307,7 +334,7 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
         }
         stateFromDb[collName] = map;
       } else {
-        // Authoritative entity collection assignment - even if items is [] so deletions persist!
+        // Authoritative entity collection assignment - even if items is [] so empty collections persist!
         stateFromDb[collName] = items;
       }
       if (exists) {
@@ -315,15 +342,13 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
       }
     }
 
+    const settingsResult = settingsRes.settingsMap || {};
     const settingsCount = Object.keys(settingsResult).length;
     for (const [key, val] of Object.entries(settingsResult)) {
       stateFromDb[key] = val;
       if (key === 'privacySecurity' || key === 'privacySecuritySettings') {
-        const existing = stateFromDb['privacySecuritySettings'] || stateFromDb['privacySecurity'];
-        if (!existing || (val && typeof val === 'object' && (!existing._updatedAt || (val._updatedAt && val._updatedAt >= existing._updatedAt)))) {
-          stateFromDb['privacySecurity'] = val;
-          stateFromDb['privacySecuritySettings'] = val;
-        }
+        stateFromDb['privacySecurity'] = val;
+        stateFromDb['privacySecuritySettings'] = val;
       }
       if (key === 'paymentSettings' || key === 'paymentConfig') {
         const flatPayment = sanitizePaymentConfig(val);
@@ -343,9 +368,12 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
       }
     }
 
-    // Check for legacy 'app_state' doc migration only if new collections and settings are completely empty
-    if (totalDocsLoaded === 0 && settingsCount === 0) {
-      console.log('[FIREBASE] Document-per-entity collections empty. Checking legacy app_state doc...');
+    // Determine if database has ever been initialized
+    const isAlreadyInitialized = !!systemInitDoc || totalDocsLoaded > 0 || settingsCount > 0;
+
+    if (!isAlreadyInitialized) {
+      // Check legacy 'app_state' doc migration only if brand new
+      console.log('[FIREBASE] No system_init sentinel found. Checking legacy app_state doc...');
       const legacyPromise = getDocs(collection(db, 'app_state'));
       const legacySnapshot = await withTimeout(legacyPromise, 8000, null);
       if (legacySnapshot && !legacySnapshot.empty) {
@@ -360,14 +388,15 @@ export async function loadStateFromFirestore(): Promise<Record<string, any> | nu
         if (Object.keys(legacyState).length > 0) {
           console.log('[FIREBASE] Migrating legacy app_state to document-per-entity structure...');
           await seedFirestoreFromInitialState(legacyState);
-          return legacyState;
+          return { state: legacyState, isFreshDatabase: false, totalDocsLoaded: Object.keys(legacyState).length };
         }
       }
-      return {};
+      // Genuinely fresh, empty database
+      return { state: {}, isFreshDatabase: true, totalDocsLoaded: 0 };
     }
 
     console.log(`[FIREBASE] Successfully loaded ${totalDocsLoaded} entity docs and ${settingsCount} settings from Cloud Firestore.`);
-    return stateFromDb;
+    return { state: stateFromDb, isFreshDatabase: false, totalDocsLoaded };
   } catch (err) {
     console.error('[FIREBASE] Failed to load state from Firestore:', err);
     return null;
@@ -386,8 +415,12 @@ export async function persistFirestoreChange(
   if (!db) return;
 
   if (!collectionOrKey) {
-    // Save all settings and entities
-    await seedFirestoreFromInitialState(dbState);
+    // Save only active settings without blind collection overwrites
+    for (const key of SETTING_KEYS) {
+      if (dbState[key] !== undefined && key !== 'system_init') {
+        await saveFirestoreSetting(key, dbState[key]);
+      }
+    }
     return;
   }
 
@@ -472,16 +505,32 @@ export async function persistFirestoreChange(
         }
       }
     } else {
-      // Collection-wide sync
+      // Collection-wide sync: prune deleted documents from Firestore
       const list = dbState[collectionOrKey];
       if (Array.isArray(list)) {
-        const promises = list.map((item: any) => {
+        try {
+          const snapshot = await getDocs(collection(db, collectionOrKey));
+          const currentMemoryIds = new Set(list.map((x: any) => String(x.id)));
+          const deletePromises: Promise<void>[] = [];
+          snapshot.forEach((d) => {
+            if (!currentMemoryIds.has(d.id)) {
+              deletePromises.push(deleteFirestoreDoc(collectionOrKey, d.id));
+            }
+          });
+          if (deletePromises.length > 0) {
+            await Promise.allSettled(deletePromises);
+          }
+        } catch (e) {
+          console.warn(`[FIREBASE] Prune check failed for ${collectionOrKey}:`, e);
+        }
+
+        const savePromises = list.map((item: any) => {
           if (item && item.id) {
             return saveFirestoreDoc(collectionOrKey, String(item.id), item);
           }
           return Promise.resolve();
         });
-        await Promise.allSettled(promises);
+        await Promise.allSettled(savePromises);
       }
     }
   }

@@ -20,7 +20,7 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
 // Set worker execution flag to prevent standalone server boot
 process.env.IS_WORKER = 'true';
 
-import { app } from '../server.js';
+import { app, ensureDatabaseReady } from '../server.js';
 
 /**
  * Bridges a standard Web Request to Express without opening any TCP sockets or calling app.listen().
@@ -177,6 +177,13 @@ export default {
 
     // Route API requests directly to the Express backend
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) {
+      if (typeof ensureDatabaseReady === 'function') {
+        try {
+          await ensureDatabaseReady();
+        } catch (e) {
+          console.error('[WORKER] Error awaiting database hydration:', e);
+        }
+      }
       return handleExpressRequest(app, request);
     }
 
