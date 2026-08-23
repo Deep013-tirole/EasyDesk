@@ -70,6 +70,7 @@ export const ENTITY_COLLECTIONS = [
   'auditLogs',
   'masterData',
   'coupons',
+  'contactMessages',
 ] as const;
 
 // Settings document keys stored inside the 'settings' Firestore collection
@@ -419,32 +420,45 @@ export async function persistFirestoreChange(
   if (!db) return;
 
   if (!collectionOrKey) {
-    // Save only active settings without blind collection overwrites
+    // Comprehensive safe flush of all active settings and entity collections
+    const promises: Promise<any>[] = [];
     for (const key of SETTING_KEYS) {
       if (dbState[key] !== undefined && key !== 'system_init') {
-        await saveFirestoreSetting(key, dbState[key]);
+        if (key === 'paymentConfig' || key === 'paymentSettings') {
+          const flatPayment = sanitizePaymentConfig(dbState.paymentConfig || dbState.settings?.paymentConfig || dbState.paymentSettings);
+          promises.push(saveFirestoreSetting('paymentConfig', flatPayment));
+          promises.push(saveFirestoreSetting('paymentSettings', flatPayment));
+        } else {
+          promises.push(saveFirestoreSetting(key, dbState[key]));
+        }
       }
     }
+    await Promise.allSettled(promises);
     return;
   }
 
   // Check if it's a setting
-  if ((SETTING_KEYS as readonly string[]).includes(collectionOrKey)) {
-    if (collectionOrKey === 'paymentConfig' || collectionOrKey === 'paymentSettings') {
+  if ((SETTING_KEYS as readonly string[]).includes(collectionOrKey) || collectionOrKey === 'settings') {
+    if (collectionOrKey === 'paymentConfig' || collectionOrKey === 'paymentSettings' || collectionOrKey === 'settings') {
       const rawData = dbState.paymentConfig || dbState.settings?.paymentConfig || dbState.paymentSettings;
       const dataToSave = sanitizePaymentConfig(rawData);
       dbState.paymentConfig = dataToSave;
       dbState.paymentSettings = dataToSave;
       if (dbState.settings) dbState.settings.paymentConfig = dataToSave;
-      await saveFirestoreSetting('paymentConfig', dataToSave);
-      await saveFirestoreSetting('paymentSettings', dataToSave);
+      await Promise.allSettled([
+        saveFirestoreSetting('paymentConfig', dataToSave),
+        saveFirestoreSetting('paymentSettings', dataToSave),
+        saveFirestoreSetting('settings', dbState.settings || {})
+      ]);
     } else if (collectionOrKey === 'privacySecurity' || collectionOrKey === 'privacySecuritySettings') {
       const dataToSave = dbState.privacySecuritySettings || dbState.privacySecurity;
       if (dataToSave) {
         dbState.privacySecuritySettings = dataToSave;
         dbState.privacySecurity = dataToSave;
-        await saveFirestoreSetting('privacySecurity', dataToSave);
-        await saveFirestoreSetting('privacySecuritySettings', dataToSave);
+        await Promise.allSettled([
+          saveFirestoreSetting('privacySecurity', dataToSave),
+          saveFirestoreSetting('privacySecuritySettings', dataToSave)
+        ]);
       }
     } else if (collectionOrKey === 'aboutUs') {
       if (dbState.aboutUs) {

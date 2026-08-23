@@ -1521,7 +1521,7 @@ const PRESEEDED_CUSTOMERS = [
   }
 ];
 
-// Load from disk if exists, otherwise setup in-memory defaults
+// Load from disk if exists, otherwise setup clean in-memory defaults
 function initDatabase() {
   if (fs.existsSync(DB_FILE)) {
     try {
@@ -1548,58 +1548,29 @@ function initDatabase() {
     } catch (e) {
       console.error('Error reading db_store.json', e);
     }
-  } else {
-    // Inject seed data on first creation
-    dbState.orders = [...SEEDED_ORDERS];
-    dbState.tickets = [...SEEDED_TICKETS];
   }
 
-  // Ensure all collections are initialized in memory
-  if (!dbState.customers || !Array.isArray(dbState.customers)) {
-    dbState.customers = [...PRESEEDED_CUSTOMERS];
-  }
+  // Ensure all collections are initialized as arrays/objects in memory
+  if (!dbState.orders) dbState.orders = [];
+  if (!dbState.tickets) dbState.tickets = [];
+  if (!dbState.customers) dbState.customers = [];
   if (!dbState.admins) dbState.admins = [];
   if (!dbState.roles) dbState.roles = [];
   if (!dbState.permissions) dbState.permissions = [];
   if (!dbState.sessions) dbState.sessions = [];
   if (!dbState.refreshTokens) dbState.refreshTokens = [];
-  if (!dbState.employees || !Array.isArray(dbState.employees)) {
-    dbState.employees = [...PRESEEDED_EMPLOYEES];
-  }
-  console.log(`[DB INIT] Total employee count loaded after initialization: ${dbState.employees.length}`);
-  if (!dbState.employeeKYC) dbState.employeeKYC = { ...PRESEEDED_EMPLOYEE_KYC };
-  if (!dbState.employeePayroll) dbState.employeePayroll = { ...PRESEEDED_EMPLOYEE_PAYROLL };
-  if (!dbState.employeeAccounts) dbState.employeeAccounts = { ...PRESEEDED_EMPLOYEE_ACCOUNTS };
+  if (!dbState.employees) dbState.employees = [];
+  if (!dbState.employeeKYC) dbState.employeeKYC = {};
+  if (!dbState.employeePayroll) dbState.employeePayroll = {};
+  if (!dbState.employeeAccounts) dbState.employeeAccounts = {};
   if (!dbState.employeeDocuments) dbState.employeeDocuments = [];
-  if (!dbState.auditLogs) dbState.auditLogs = [...PRESEEDED_AUDIT_LOGS] as any[];
+  if (!dbState.auditLogs) dbState.auditLogs = [];
+  if (!dbState.contactMessages) dbState.contactMessages = [];
+  if (!dbState.media) dbState.media = [];
 
   if (!dbState.masterData) {
     dbState.masterData = JSON.parse(JSON.stringify(PRESEEDED_MASTER_DATA));
-  } else {
-    if (!Array.isArray(dbState.masterData.departments) || dbState.masterData.departments.length === 0) {
-      dbState.masterData.departments = [...PRESEEDED_MASTER_DATA.departments];
-    }
-    if (!Array.isArray(dbState.masterData.designations) || dbState.masterData.designations.length === 0) {
-      dbState.masterData.designations = [...PRESEEDED_MASTER_DATA.designations];
-    }
-    if (!Array.isArray(dbState.masterData.employmentTypes) || dbState.masterData.employmentTypes.length === 0) {
-      dbState.masterData.employmentTypes = [...PRESEEDED_MASTER_DATA.employmentTypes];
-    }
-    if (!Array.isArray(dbState.masterData.workLocations) || dbState.masterData.workLocations.length === 0) {
-      dbState.masterData.workLocations = [...PRESEEDED_MASTER_DATA.workLocations];
-    }
-    if (!Array.isArray(dbState.masterData.employeeStatuses) || dbState.masterData.employeeStatuses.length === 0) {
-      dbState.masterData.employeeStatuses = [...PRESEEDED_MASTER_DATA.employeeStatuses];
-    }
-    if (!Array.isArray(dbState.masterData.documentTypes) || dbState.masterData.documentTypes.length === 0) {
-      dbState.masterData.documentTypes = [...PRESEEDED_MASTER_DATA.documentTypes];
-    }
-    if (!Array.isArray(dbState.masterData.banks) || dbState.masterData.banks.length === 0) {
-      dbState.masterData.banks = [...PRESEEDED_MASTER_DATA.banks];
-    }
   }
-
-  let changed = false;
 
   const GRANULAR_PERMISSIONS = [
     // Operational Hub
@@ -1662,13 +1633,11 @@ function initDatabase() {
   // Seed or upgrade permissions
   if (!dbState.permissions || dbState.permissions.length === 0) {
     dbState.permissions = [...GRANULAR_PERMISSIONS];
-    changed = true;
   } else {
     // Ensure all granular permissions are present
     GRANULAR_PERMISSIONS.forEach(gp => {
       if (!dbState.permissions.some((p: any) => p.id === gp.id)) {
         dbState.permissions.push(gp);
-        changed = true;
       }
     });
   }
@@ -1721,66 +1690,18 @@ function initDatabase() {
         permissions: ['blogs.view', 'blogs.manage', 'pages.manage', 'banners.manage', 'media.manage', 'services.view', 'about.manage']
       }
     ];
-    changed = true;
   } else {
     // Ensure SUPER_ADMIN role in dbState.roles has all permissions
     const sa = dbState.roles.find((r: any) => r.id === 'SUPER_ADMIN');
     if (sa) {
       sa.permissions = allPermIds;
-      changed = true;
     }
   }
 
-  // Ensure standard customers are seeded
-  if (dbState.customers.length === 0) {
-    dbState.customers = dbState.users.filter(u => u.role === UserRole.USER).map(u => ({
-      ...u,
-      password: u.password || DEFAULT_PASSWORD_HASH,
-      country: 'India',
-      state: 'Maharashtra',
-      city: 'Mumbai',
-      profilePhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-      isVerified: true
-    }));
-    changed = true;
+  // Ensure default super admin exists in admins list
+  if (!dbState.admins.some((a: any) => a.role === 'SUPER_ADMIN')) {
+    dbState.admins.unshift({ ...PRESEEDED_ADMINS[0] });
   }
-
-  // Ensure standard admins are seeded
-  if (dbState.admins.length === 0) {
-    dbState.admins = dbState.users.filter(u => u.role !== UserRole.USER).map(u => ({
-      ...u,
-      password: u.password || DEFAULT_PASSWORD_HASH,
-      employeeId: `EMP-${u.id.replace(/\D/g, '') || Math.floor(100 + Math.random() * 900)}`,
-      department: (u.role as string) === 'SUPER_ADMIN' ? 'Executive' : u.role === UserRole.ADMIN ? 'Management' : 'Operations',
-      status: 'Active',
-      joiningDate: u.createdAt || new Date().toISOString(),
-      profileImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-      permissions: (u.role as string) === 'SUPER_ADMIN' ? 
-        ['create_service', 'edit_service', 'delete_service', 'publish_blog', 'manage_orders', 'manage_users', 'manage_payments', 'manage_settings', 'view_analytics'] :
-        ['create_service', 'edit_service', 'publish_blog', 'manage_orders', 'view_analytics']
-    }));
-    changed = true;
-  }
-
-  // Sync back to dbState.users while preserving existing users
-  const userMap = new Map<string, any>();
-  (dbState.users || []).forEach(u => userMap.set(u.id, u));
-  dbState.customers.forEach(c => userMap.set(c.id, { id: c.id, name: c.name, email: c.email, role: UserRole.USER, createdAt: c.createdAt, isSuspended: c.isSuspended, password: c.password }));
-  dbState.admins.forEach(a => userMap.set(a.id, { id: a.id, name: a.name, email: a.email, role: a.role, createdAt: a.createdAt, isSuspended: a.isSuspended, password: a.password }));
-  
-  dbState.users = Array.from(userMap.values());
-
-  // Ensure all users have a hashed password in memory if missing
-  dbState.customers.forEach((cust: any) => {
-    if (!cust.password) {
-      cust.password = DEFAULT_PASSWORD_HASH;
-    }
-  });
-  dbState.admins.forEach((adm: any) => {
-    if (!adm.password) {
-      adm.password = DEFAULT_PASSWORD_HASH;
-    }
-  });
 
   console.log('In-memory database state initialized.');
   normalizeDatabaseRelationships();
@@ -2126,42 +2047,40 @@ function normalizeDatabaseRelationships() {
   }
 
   // 3. Normalize Service Categories
-  if (!Array.isArray(dbState.categories) || dbState.categories.length === 0) {
-    dbState.categories = [...PRESEEDED_CATEGORIES];
-  } else {
-    // Ensure all categories have status, slug, and sortOrder
-    dbState.categories.forEach((cat, idx) => {
-      if (!cat.status) cat.status = 'Active';
-      if (!cat.slug) cat.slug = cat.id || cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-      if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
-      if (!cat.color) cat.color = 'blue';
-    });
+  if (!Array.isArray(dbState.categories)) {
+    dbState.categories = [];
   }
+  // Ensure all categories have status, slug, and sortOrder
+  dbState.categories.forEach((cat: any, idx: number) => {
+    if (!cat.status) cat.status = 'Active';
+    if (!cat.slug) cat.slug = cat.id || (cat.name ? cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : `cat-${idx}`);
+    if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
+    if (!cat.color) cat.color = 'blue';
+  });
 
   // Ensure services have valid categoryId
   if (Array.isArray(dbState.services)) {
-    const validCatIds = new Set(dbState.categories.map(c => c.id));
+    const validCatIds = new Set(dbState.categories.map((c: any) => c.id));
     const fallbackCatId = dbState.categories[0]?.id || 'gov';
     for (const s of dbState.services) {
       if (!s.categoryId || !validCatIds.has(s.categoryId)) {
         // Match by title substring or assign fallback
-        const matched = dbState.categories.find(c => c.name.toLowerCase() === (s.categoryId || '').toLowerCase());
-        s.categoryId = matched ? matched.id : fallbackCatId;
+        const matched = dbState.categories.find((c: any) => c.name && (c.name.toLowerCase() === (s.categoryId || '').toLowerCase()));
+        s.categoryId = matched ? matched.id : (validCatIds.size > 0 ? fallbackCatId : (s.categoryId || 'gov'));
       }
     }
   }
 
   // 4. Normalize Blog Categories & Blog relationships
-  if (!Array.isArray(dbState.blogCategories) || dbState.blogCategories.length === 0) {
-    dbState.blogCategories = [...PRESEEDED_BLOG_CATEGORIES];
-  } else {
-    dbState.blogCategories.forEach((cat, idx) => {
-      if (!cat.status) cat.status = 'Active';
-      if (!cat.slug) cat.slug = cat.id || cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-      if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
-      if (!cat.color) cat.color = 'blue';
-    });
+  if (!Array.isArray(dbState.blogCategories)) {
+    dbState.blogCategories = [];
   }
+  dbState.blogCategories.forEach((cat: any, idx: number) => {
+    if (!cat.status) cat.status = 'Active';
+    if (!cat.slug) cat.slug = cat.id || (cat.name ? cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : `bcat-${idx}`);
+    if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
+    if (!cat.color) cat.color = 'blue';
+  });
 
   if (Array.isArray(dbState.blogs)) {
     const fallbackBlogCat = dbState.blogCategories[0] || { id: 'blog-cat-gov', name: 'Government Schemes' };
@@ -5007,24 +4926,24 @@ app.get('/api/admin/about/team', (req, res) => {
   res.json(dbState.aboutUs?.teamStats || PRESEEDED_ABOUT_US.teamStats);
 });
 
-app.put('/api/admin/about/team', (req, res) => {
+app.put('/api/admin/about/team', async (req, res) => {
   const { teamStats, updaterId, updaterName, updaterRole } = req.body;
   if (teamStats) {
     if (!dbState.aboutUs) dbState.aboutUs = { ...PRESEEDED_ABOUT_US };
     dbState.aboutUs.teamStats = { ...dbState.aboutUs.teamStats, ...teamStats };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'ABOUT_TEAM_UPDATE', 'Updated About Us aggregate team statistics.');
-    persistDatabase('aboutUs');
+    await persistDatabase('aboutUs');
   }
   res.json({ message: 'Aggregate team statistics updated successfully.', teamStats: dbState.aboutUs?.teamStats });
 });
 
-app.post('/api/admin/about/team', (req, res) => {
+app.post('/api/admin/about/team', async (req, res) => {
   const { teamStats, updaterId, updaterName, updaterRole } = req.body;
   if (teamStats) {
     if (!dbState.aboutUs) dbState.aboutUs = { ...PRESEEDED_ABOUT_US };
     dbState.aboutUs.teamStats = { ...dbState.aboutUs.teamStats, ...teamStats };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'ABOUT_TEAM_UPDATE', 'Updated About Us aggregate team statistics.');
-    persistDatabase('aboutUs');
+    await persistDatabase('aboutUs');
   }
   res.json({ message: 'Aggregate team statistics updated successfully.', teamStats: dbState.aboutUs?.teamStats });
 });
@@ -5037,7 +4956,7 @@ app.get('/api/team', (req, res) => {
 // ---------------- PRIVATE INTERNAL EMPLOYEE / TEAM RECORDS MANAGEMENT APIS ----------------
 
 // Photo upload API endpoint for employee records
-app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], (req, res) => {
+app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], async (req, res) => {
   try {
     const { image, updaterId, updaterName, updaterRole } = req.body;
     if (!image) {
@@ -5089,7 +5008,7 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
 
     if (!dbState.media) dbState.media = [];
     dbState.media.unshift(newMedia);
-    persistDatabase('media', newMedia.id);
+    await persistDatabase('media', newMedia.id);
 
     res.json({ message: 'Photo uploaded successfully.', photoUrl, filename: uniqueFilename, media: newMedia });
   } catch (err: any) {
@@ -5101,8 +5020,7 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
 // GET all employee operational profiles (Private internal admin endpoint)
 app.get('/api/admin/employees', authenticateToken, requirePermission(['employees.view', 'employees.manage']), (req, res) => {
   if (!dbState.employees) {
-    dbState.employees = [...PRESEEDED_EMPLOYEES];
-    persistDatabase();
+    dbState.employees = [];
   }
   console.log(`[EMPLOYEE FETCH] Employee count loaded after login/fetch: ${dbState.employees.length}`);
   res.json(dbState.employees);
@@ -5770,12 +5688,12 @@ app.get('/api/company-profile', (req, res) => {
   res.json(dbState.companyProfile || PRESEEDED_COMPANY_PROFILE);
 });
 
-app.post('/api/admin/company-profile', (req, res) => {
+app.post('/api/admin/company-profile', async (req, res) => {
   const { companyProfile, updaterId, updaterName, updaterRole } = req.body;
   if (companyProfile) {
     dbState.companyProfile = { ...(dbState.companyProfile || PRESEEDED_COMPANY_PROFILE), ...companyProfile };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'COMPANY_PROFILE_UPDATE', 'Updated company profile, logo, address, and ID card branding colors.');
-    persistDatabase();
+    await persistDatabase('companyProfile');
   }
   res.json({ message: 'Company profile updated successfully.', companyProfile: dbState.companyProfile });
 });
@@ -5861,7 +5779,7 @@ app.put('/api/contact-settings', handleContactSettingsUpdate);
 app.put('/api/settings/contact', handleContactSettingsUpdate);
 app.put('/api/admin/settings/contact', handleContactSettingsUpdate);
 
-app.post('/api/contact-messages', (req, res) => {
+app.post('/api/contact-messages', async (req, res) => {
   const { name, email, phone, subject, message } = req.body;
   if (!name || !email || !message) {
     return res.status(400).json({ message: 'Name, email, and message content are required.' });
@@ -5878,23 +5796,24 @@ app.post('/api/contact-messages', (req, res) => {
     createdAt: new Date().toISOString()
   };
 
+  if (!dbState.contactMessages) dbState.contactMessages = [];
   dbState.contactMessages.unshift(newMsg);
-  persistDatabase();
+  await persistDatabase('contactMessages', newMsg.id);
   res.status(201).json({ message: 'Message sent successfully!', messageData: newMsg });
 });
 
 app.get('/api/admin/contact-messages', (req, res) => {
-  res.json(dbState.contactMessages);
+  res.json(dbState.contactMessages || []);
 });
 
-app.patch('/api/admin/contact-messages/:id', (req, res) => {
+app.patch('/api/admin/contact-messages/:id', async (req, res) => {
   const { status, updaterId, updaterName, updaterRole } = req.body;
-  const msg = dbState.contactMessages.find((m: any) => m.id === req.params.id);
+  const msg = (dbState.contactMessages || []).find((m: any) => m.id === req.params.id);
   if (!msg) return res.status(404).json({ message: 'Message not found' });
 
   msg.status = status || 'Replied';
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'CONTACT_MSG_UPDATE', `Updated status of contact message from ${msg.name} to ${msg.status}`);
-  persistDatabase();
+  await persistDatabase('contactMessages', req.params.id);
   res.json(msg);
 });
 
@@ -5906,13 +5825,13 @@ app.get(['/api/admin/master-data', '/api/master-data'], (req, res) => {
   res.json(dbState.masterData);
 });
 
-const handleMasterDataUpdate = (req: express.Request, res: express.Response) => {
+const handleMasterDataUpdate = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const masterData = req.body.masterData || req.body;
   if (masterData) {
     dbState.masterData = { ...(dbState.masterData || PRESEEDED_MASTER_DATA), ...masterData };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'MASTER_DATA_UPDATE', 'Updated system master data (departments, designations, banks, locations).');
-    persistDatabase('masterData');
+    await persistDatabase('masterData');
   }
   res.json({ message: 'Master data updated successfully.', masterData: dbState.masterData });
 };
@@ -5925,13 +5844,13 @@ app.get(['/api/general-settings', '/api/admin/general-settings', '/api/admin/set
   res.json(dbState.generalSettings || PRESEEDED_GENERAL_SETTINGS);
 });
 
-const handleGeneralSettingsUpdate = (req: express.Request, res: express.Response) => {
+const handleGeneralSettingsUpdate = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const generalSettings = req.body.generalSettings || req.body;
   if (generalSettings) {
     dbState.generalSettings = { ...(dbState.generalSettings || PRESEEDED_GENERAL_SETTINGS), ...generalSettings };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'GENERAL_SETTINGS_UPDATE', 'Updated system general settings and SEO meta config.');
-    persistDatabase('generalSettings');
+    await persistDatabase('generalSettings');
   }
   res.json({ message: 'General settings saved successfully.', generalSettings: dbState.generalSettings });
 };
@@ -5941,17 +5860,22 @@ app.put(['/api/admin/general-settings', '/api/admin/settings/general', '/api/gen
 
 // Payment settings alias
 app.get(['/api/admin/settings/payment', '/api/settings/payment'], (req, res) => {
-  res.json(dbState.settings?.paymentConfig || (dbState as any).paymentSettings || PRESEEDED_PAYMENT_CONFIG);
+  res.json(dbState.settings?.paymentConfig || (dbState as any).paymentSettings || (dbState as any).paymentConfig || PRESEEDED_PAYMENT_CONFIG);
 });
 
-const handlePaymentConfigRoute = (req: express.Request, res: express.Response) => {
+const handlePaymentConfigRoute = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const paymentConfig = req.body.paymentConfig || req.body;
   if (paymentConfig) {
     if (!dbState.settings) dbState.settings = {} as any;
-    dbState.settings.paymentConfig = { ...(dbState.settings.paymentConfig || PRESEEDED_PAYMENT_CONFIG), ...paymentConfig };
+    const sanitized = sanitizePaymentConfig(paymentConfig);
+    dbState.settings.paymentConfig = sanitized;
+    dbState.paymentConfig = sanitized;
+    dbState.paymentSettings = sanitized;
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'PAYMENT_CONFIG_UPDATE', 'Updated manual payment configuration (UPI/Bank/QR).');
-    persistDatabase('settings');
+    await persistDatabase('paymentConfig');
+    await persistDatabase('paymentSettings');
+    await persistDatabase('settings');
   }
   res.json({ message: 'Payment settings updated successfully.', paymentConfig: dbState.settings.paymentConfig });
 };
@@ -5991,7 +5915,7 @@ const handlePrivacySecurityUpdate = async (req: express.Request, res: express.Re
 app.post(['/api/admin/privacy-security', '/api/privacy-security', '/api/settings/privacy-security', '/api/admin/settings/privacy-security'], handlePrivacySecurityUpdate);
 app.put(['/api/admin/privacy-security', '/api/privacy-security', '/api/settings/privacy-security', '/api/admin/settings/privacy-security'], handlePrivacySecurityUpdate);
 
-app.post('/api/security/report-scam', (req, res) => {
+app.post('/api/security/report-scam', async (req, res) => {
   const { reporterName, reporterEmail, reporterPhone, scamDetails, impersonatorContact, channelUsed } = req.body;
   if (!reporterName && !scamDetails && !impersonatorContact) {
     return res.status(400).json({ message: 'Please provide incident details or suspicious contact information.' });
@@ -6009,7 +5933,7 @@ app.post('/api/security/report-scam', (req, res) => {
   };
   if (!dbState.scamReports) dbState.scamReports = [];
   dbState.scamReports.unshift(report);
-  persistDatabase();
+  await persistDatabase('auditLogs', report.id);
   res.status(201).json({ message: 'Scam incident report submitted successfully to EasyDesk Security Team.', report });
 });
 
@@ -6978,7 +6902,7 @@ app.post('/api/admin/services/bulk-delete', authenticateToken, requireRole(['SUP
 });
 
 // Bulk Update Services Status
-app.post('/api/admin/services/bulk-status', (req, res) => {
+app.post('/api/admin/services/bulk-status', async (req, res) => {
   const { ids, status, updaterId, updaterName, updaterRole } = req.body || {};
   if (!ids || !Array.isArray(ids) || !status) return res.status(400).json({ message: 'Array of ids and status required' });
   dbState.services.forEach(s => {
@@ -6987,7 +6911,7 @@ app.post('/api/admin/services/bulk-status', (req, res) => {
     }
   });
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'SERVICE_BULK_STATUS', `Bulk updated ${ids.length} services to status ${status}`);
-  persistDatabase();
+  await persistDatabase('services');
   res.json({ message: 'Bulk status updated successfully' });
 });
 
