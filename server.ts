@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import defaultFirebaseConfig from './firebase-applet-config.json';
 
 // Precomputed standard bcrypt hash for default seeding ('password123')
 const DEFAULT_PASSWORD_HASH = '$2b$10$L9f9Lig0UOY6RNrx.TWalukMMWnwiWv.y7e5fYNyyuD14tVG5LraK';
@@ -2499,10 +2500,14 @@ function getEffectivePermissionsForUser(adminUser: any): string[] {
 
 async function verifyFirebaseIdToken(idToken: string) {
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) return null;
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    if (!config.apiKey) return null;
+    let config: any = defaultFirebaseConfig;
+    if (!config || !config.apiKey) {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      }
+    }
+    if (!config?.apiKey) return null;
 
     const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${config.apiKey}`, {
       method: 'POST',
@@ -7915,26 +7920,16 @@ async function startServer() {
 
 export { app, startServer };
 
-// Auto-start standalone server ONLY when executed directly in Node.js / dev mode as standalone entrypoint
+// Auto-start standalone server when executed in Node.js / dev mode
 const isWorkerRuntime = Boolean(
   process.env.IS_WORKER === 'true' ||
   process.env.CLOUDFLARE_WORKER ||
   process.env.CF_PAGES ||
-  (typeof navigator !== 'undefined' && (navigator as any).userAgent === 'Cloudflare-Workers')
+  (typeof (globalThis as any).WebSocketPair !== 'undefined') ||
+  (typeof (globalThis as any).navigator !== 'undefined' && (globalThis as any).navigator.userAgent === 'Cloudflare-Workers')
 );
 
-const isStandaloneRun = Boolean(
-  !isWorkerRuntime &&
-  process.argv[1] &&
-  (
-    process.argv[1].endsWith('server.ts') ||
-    process.argv[1].endsWith('server.cjs') ||
-    process.argv[1].endsWith('server.js') ||
-    process.argv[1].endsWith('/dist/server.cjs')
-  )
-);
-
-if (isStandaloneRun) {
+if (!isWorkerRuntime) {
   startServer().catch(err => {
     console.error('Failed to start server:', err);
   });

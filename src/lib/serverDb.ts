@@ -2,6 +2,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, setLogLevel } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
+import defaultFirebaseConfig from '../../firebase-applet-config.json';
 
 try {
   setLogLevel('error');
@@ -12,9 +13,14 @@ let firestoreInstance: ReturnType<typeof getFirestore> | null = null;
 export function getFirestoreDb() {
   if (firestoreInstance) return firestoreInstance;
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    let config: any = defaultFirebaseConfig;
+    if (!config || !config.apiKey) {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+    }
+    if (config && config.apiKey) {
       const firebaseConfig = {
         apiKey: config.apiKey,
         authDomain: config.authDomain,

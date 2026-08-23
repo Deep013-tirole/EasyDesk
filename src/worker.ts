@@ -75,9 +75,21 @@ async function handleExpressRequest(expressApp: any, webReq: Request): Promise<R
     req.headers['x-forwarded-for'] = xForwardedFor;
   }
 
-  (req as any).socket = socket;
-  (req as any).connection = socket;
-  (req as any).ip = clientIp;
+  try {
+    if (!(req as any).socket) {
+      Object.defineProperty(req, 'socket', { value: socket, configurable: true, writable: true });
+    }
+  } catch {}
+  try {
+    if (!(req as any).connection) {
+      Object.defineProperty(req, 'connection', { value: socket, configurable: true, writable: true });
+    }
+  } catch {}
+  try {
+    Object.defineProperty(req, 'ip', { value: clientIp, configurable: true, writable: true });
+  } catch {
+    (req as any).ip = clientIp;
+  }
 
   if (!req.headers['content-length'] && bodyBuffer.length > 0) {
     req.headers['content-length'] = String(bodyBuffer.length);
