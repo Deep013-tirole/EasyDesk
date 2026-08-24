@@ -2170,7 +2170,11 @@ let firestoreInitPromise: Promise<void> | null = null;
 export function ensureDatabaseReady(): Promise<void> {
   if (isFirestoreReady) return Promise.resolve();
   if (!firestoreInitPromise) {
-    firestoreInitPromise = asyncInitFirestoreDatabase();
+    firestoreInitPromise = asyncInitFirestoreDatabase().catch(err => {
+      console.error('[DB] Error during asyncInitFirestoreDatabase execution:', err);
+      firestoreInitPromise = null;
+      throw err;
+    });
   }
   return firestoreInitPromise;
 }
@@ -2250,7 +2254,7 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
 
       normalizeDatabaseRelationships();
 
-      // Pre-write all database media and employee photos to local disk for rapid serving
+      // Pre-write all database media and employee photos to local disk for rapid serving (when filesystem available)
       try {
         if (Array.isArray(dbState.media)) {
           for (const item of dbState.media) {
@@ -2259,45 +2263,56 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
             if (rawData && fileName) {
               const folder = item.folder === 'employees' ? 'employees' : 'media';
               const targetPath = path.join(process.cwd(), 'uploads', folder, fileName);
-              if (!fs.existsSync(targetPath)) {
+              if (fs.existsSync && !fs.existsSync(targetPath)) {
                 let base64 = rawData;
                 if (base64.includes(';base64,')) {
                   base64 = base64.split(';base64,')[1];
                 }
-                fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-                fs.writeFileSync(targetPath, Buffer.from(base64, 'base64'));
+                if (fs.mkdirSync && fs.writeFileSync) {
+                  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+                  fs.writeFileSync(targetPath, Buffer.from(base64, 'base64'));
+                }
               }
             }
           }
         }
       } catch (mediaSyncErr) {
-        console.error('[STORAGE] Error syncing media files to disk on boot:', mediaSyncErr);
+        // Ignored in edge / serverless
       }
 
       try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), 'utf-8');
+        if (fs.writeFileSync) {
+          fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), 'utf-8');
+        }
       } catch (e) {
         // Local cache write error ignored
       }
 
       console.log('[DB] Successfully hydrated authoritative production dbState from Cloud Firestore!');
+      isFirestoreReady = true;
     } else if (result && result.isFreshDatabase) {
       console.log('[DB] Virgin Firestore database detected. Seeding initial baseline and system_init sentinel to Cloud Firestore...');
       normalizeDatabaseRelationships();
       await seedFirestoreFromInitialState(dbState);
       console.log('[DB] Baseline state and system_init sentinel successfully written to Cloud Firestore.');
+      isFirestoreReady = true;
     } else {
-      console.log('[DB] Firestore temporarily offline or unreachable; preserving active local state.');
+      console.warn('[DB] Firestore unreachable on this attempt; will retry on next request.');
+      firestoreInitPromise = null;
     }
-    isFirestoreReady = true;
   } catch (err) {
     console.error('[DB] Error during async Firestore initialization:', err);
-    isFirestoreReady = true;
+    firestoreInitPromise = null;
   }
 }
 
 initDatabase();
-firestoreInitPromise = asyncInitFirestoreDatabase();
+
+// In standalone Node.js environment, boot Firestore hydration immediately.
+// In Cloudflare Worker environment, do NOT execute I/O at top-level script evaluation.
+if (typeof process !== 'undefined' && !process.env.IS_WORKER && process.env.NODE_ENV !== 'test') {
+  firestoreInitPromise = asyncInitFirestoreDatabase();
+}
 
 // Lazy initialization of Gemini SDK
 let aiClient: GoogleGenAI | null = null;
@@ -3869,7 +3884,7 @@ app.patch('/api/admin/orders/:id/whatsapp-delivery', async (req, res) => {
 // =========================================================
 
 // Order Assignment Route (Admin)
-app.patch('/api/admin/orders/:id/assign', authenticateToken, requirePermission(['orders.assign', 'orders.update']), (req, res) => {
+app.patch('/api/admin/orders/:id/assign', authenticateToken, requirePermission(['orders.assign', 'orders.update']), async (req, res) => {
   const { id } = req.params;
   const { assignedEmployeeId } = req.body;
 
@@ -3895,7 +3910,7 @@ app.patch('/api/admin/orders/:id/assign', authenticateToken, requirePermission([
     });
 
     addAuditLog((req as any).user?.id || 'admin', (req as any).user?.name || 'Admin', (req as any).user?.role || 'ADMIN', 'ORDER_UNASSIGNED', `Order ${order.id} was unassigned.`);
-    persistDatabase('orders', order.id);
+    await persistDatabase('orders', order.id);
     return res.json({ message: 'Order unassigned successfully.', order });
   }
 
@@ -3947,7 +3962,7 @@ app.patch('/api/admin/orders/:id/assign', authenticateToken, requirePermission([
     order.id
   );
 
-  persistDatabase('orders', order.id);
+  await persistDatabase('orders', order.id);
   res.json({ message: `Order successfully assigned to ${emp.fullName}.`, order });
 });
 
@@ -4504,14 +4519,14 @@ app.get('/api/notifications', (req, res) => {
   res.json(userNotifs);
 });
 
-app.post('/api/notifications/read', (req, res) => {
+app.post('/api/notifications/read', async (req, res) => {
   const { userId } = req.body;
   dbState.notifications.forEach(n => {
     if (n.userId === userId) {
       n.isRead = true;
     }
   });
-  persistDatabase();
+  await persistDatabase('notifications');
   res.json({ success: true });
 });
 
@@ -4811,12 +4826,12 @@ app.get('/api/admin/settings', (req, res) => {
   res.json(dbState.settings);
 });
 
-app.post('/api/admin/settings', (req, res) => {
+app.post('/api/admin/settings', async (req, res) => {
   const { updaterId, updaterName, updaterRole, settings } = req.body;
   if (settings) {
     dbState.settings = { ...dbState.settings, ...settings };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'SETTINGS_UPDATE', 'Updated global settings configuration.');
-    persistDatabase();
+    await persistDatabase('settings');
   }
   res.json({ message: 'Settings successfully applied.', settings: dbState.settings });
 });
@@ -5079,7 +5094,7 @@ app.get('/api/admin/assignable-employees', authenticateToken, requirePermission(
 });
 
 // CREATE or UPDATE operational profile
-app.post('/api/admin/employees', authenticateToken, requirePermission(['employees.manage', 'employees.view']), (req, res) => {
+app.post('/api/admin/employees', authenticateToken, requirePermission(['employees.manage', 'employees.view']), async (req, res) => {
   const body = req.body.employee || req.body || {};
   const fullName = body.fullName || body.name || '';
   const designation = body.designation || '';
@@ -5190,7 +5205,7 @@ app.post('/api/admin/employees', authenticateToken, requirePermission(['employee
     getEmployeePayroll(empId);
   }
 
-  persistDatabase('employees', empId);
+  await persistDatabase('employees', empId);
   console.log(`[EMPLOYEE CREATE/UPDATE] Employee created/updated ID: ${empId}`);
   console.log(`[EMPLOYEE CREATE/UPDATE] Employee count before save: ${countBefore}`);
   console.log(`[EMPLOYEE CREATE/UPDATE] Employee count after save: ${dbState.employees.length}`);
@@ -5199,7 +5214,7 @@ app.post('/api/admin/employees', authenticateToken, requirePermission(['employee
 });
 
 // UPDATE operational profile by ID
-app.put('/api/admin/employees/:id', authenticateToken, requirePermission(['employees.manage', 'employees.view']), (req, res) => {
+app.put('/api/admin/employees/:id', authenticateToken, requirePermission(['employees.manage', 'employees.view']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   if (!emp) {
@@ -5263,12 +5278,12 @@ app.put('/api/admin/employees/:id', authenticateToken, requirePermission(['emplo
   };
 
   logAudit(req, 'EMPLOYEE_PROFILE_UPDATED', `Updated operational profile for ${dbState.employees[idx].fullName}`, current.id);
-  persistDatabase('employees', current.id);
+  await persistDatabase('employees', current.id);
   res.json(dbState.employees[idx]);
 });
 
 // UPDATE employee status explicitly
-app.patch('/api/admin/employees/:id/status', authenticateToken, requirePermission(['employees.manage', 'employees.view']), (req, res) => {
+app.patch('/api/admin/employees/:id/status', authenticateToken, requirePermission(['employees.manage', 'employees.view']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   if (!emp) {
@@ -5287,7 +5302,7 @@ app.patch('/api/admin/employees/:id/status', authenticateToken, requirePermissio
   dbState.employees[idx].updatedAt = new Date().toISOString();
 
   logAudit(req, 'EMPLOYEE_STATUS_CHANGED', `Changed employment status for ${dbState.employees[idx].fullName} to ${newStatus}`, emp.id);
-  persistDatabase('employees', emp.id);
+  await persistDatabase('employees', emp.id);
 
   res.json({
     success: true,
@@ -5296,7 +5311,7 @@ app.patch('/api/admin/employees/:id/status', authenticateToken, requirePermissio
   });
 });
 
-app.put('/api/admin/employees/:id/status', authenticateToken, requirePermission(['employees.manage', 'employees.view']), (req, res) => {
+app.put('/api/admin/employees/:id/status', authenticateToken, requirePermission(['employees.manage', 'employees.view']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   if (!emp) {
@@ -5315,7 +5330,7 @@ app.put('/api/admin/employees/:id/status', authenticateToken, requirePermission(
   dbState.employees[idx].updatedAt = new Date().toISOString();
 
   logAudit(req, 'EMPLOYEE_STATUS_CHANGED', `Changed employment status for ${dbState.employees[idx].fullName} to ${newStatus}`, emp.id);
-  persistDatabase('employees', emp.id);
+  await persistDatabase('employees', emp.id);
 
   res.json({
     success: true,
@@ -5325,7 +5340,7 @@ app.put('/api/admin/employees/:id/status', authenticateToken, requirePermission(
 });
 
 // DELETE employee record (soft deactivation by default, permanent removal if ?permanent=true)
-app.delete('/api/admin/employees/:id', authenticateToken, requirePermission('employees.manage'), (req, res) => {
+app.delete('/api/admin/employees/:id', authenticateToken, requirePermission('employees.manage'), async (req, res) => {
   const { id } = req.params;
   const isHardDelete = req.query.permanent === 'true' || req.query.hard === 'true' || req.query.force === 'true';
   const emp = findEmployee(id);
@@ -5350,7 +5365,7 @@ app.delete('/api/admin/employees/:id', authenticateToken, requirePermission('emp
     logAudit(req, 'EMPLOYEE_DEACTIVATED', `Deactivated employee ${emp.fullName} (${emp.employeeCode})`, canonicalId);
   }
 
-  persistDatabase('employees', canonicalId);
+  await persistDatabase('employees', canonicalId);
   res.json({ message: isHardDelete ? 'Employee record permanently deleted.' : 'Employee profile marked as Terminated/Deactivated.', employee: emp });
 });
 
@@ -5374,14 +5389,14 @@ app.get('/api/admin/employees/:id/kyc', authenticateToken, requirePermission(['e
   res.json(responseKyc);
 });
 
-app.put('/api/admin/employees/:id/kyc', authenticateToken, requirePermission(['employee_kyc.manage', 'employee_kyc.view', 'employees.manage', 'employees.view']), (req, res) => {
+app.put('/api/admin/employees/:id/kyc', authenticateToken, requirePermission(['employee_kyc.manage', 'employee_kyc.view', 'employees.manage', 'employees.view']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   const canonicalId = emp ? emp.id : id;
   const updated = setEmployeeKYC(canonicalId, req.body, (req as any).user?.name || 'Admin User');
 
   logAudit(req, 'KYC_UPDATED', `Updated sensitive KYC records for employee ${canonicalId}`, canonicalId);
-  persistDatabase('employeeKYC', canonicalId);
+  await persistDatabase('employeeKYC', canonicalId);
   res.json({ message: 'KYC record updated successfully.', kyc: updated });
 });
 
@@ -5403,14 +5418,14 @@ app.get('/api/admin/employees/:id/payroll', authenticateToken, requirePermission
   res.json(responsePayroll);
 });
 
-app.put('/api/admin/employees/:id/payroll', authenticateToken, requirePermission(['employee_payroll.manage', 'employee_payroll.view', 'employees.manage', 'employees.view']), (req, res) => {
+app.put('/api/admin/employees/:id/payroll', authenticateToken, requirePermission(['employee_payroll.manage', 'employee_payroll.view', 'employees.manage', 'employees.view']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   const canonicalId = emp ? emp.id : id;
   const updated = setEmployeePayroll(canonicalId, req.body);
 
   logAudit(req, 'PAYROLL_UPDATED', `Updated salary and bank payroll records for employee ${canonicalId}`, canonicalId);
-  persistDatabase('employeePayroll', canonicalId);
+  await persistDatabase('employeePayroll', canonicalId);
   res.json({ message: 'Payroll record updated successfully.', payroll: updated });
 });
 
@@ -5421,7 +5436,7 @@ app.get('/api/admin/employees/:id/documents', authenticateToken, requirePermissi
   res.json(docs);
 });
 
-app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermission(['employee_kyc.manage', 'employees.manage', 'documents.upload']), (req, res) => {
+app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermission(['employee_kyc.manage', 'employees.manage', 'documents.upload']), async (req, res) => {
   const { id } = req.params;
   const emp = findEmployee(id);
   const canonicalId = emp ? emp.id : id;
@@ -5446,7 +5461,13 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
   const privateKey = `doc_${canonicalId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}_${safeName}`;
   const filePath = path.join(PRIVATE_UPLOADS_DIR, privateKey);
 
-  fs.writeFileSync(filePath, fileBuffer);
+  try {
+    if (fs.writeFileSync) {
+      fs.writeFileSync(filePath, fileBuffer);
+    }
+  } catch (fsErr) {
+    // Ignored in worker
+  }
 
   const sizeKb = (fileBuffer.length / 1024).toFixed(1);
   const sizeStr = fileBuffer.length > 1024 * 1024 ? `${(fileBuffer.length / (1024 * 1024)).toFixed(2)} MB` : `${sizeKb} KB`;
@@ -5471,7 +5492,7 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
   dbState.employeeDocuments.push(newDoc);
 
   logAudit(req, 'SENSITIVE_DOCUMENT_UPLOADED', `Uploaded private document: ${newDoc.documentName} (${documentType})`, canonicalId, newDoc.id);
-  persistDatabase('employeeDocuments', newDoc.id);
+  await persistDatabase('employeeDocuments', newDoc.id);
 
   res.status(201).json(newDoc);
 });
@@ -5487,7 +5508,7 @@ app.get('/api/admin/employees/:id/documents/:docId/download', authenticateToken,
   }
 
   const filePath = path.join(PRIVATE_UPLOADS_DIR, doc.privateFileKey);
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync || !fs.existsSync(filePath)) {
     return res.status(404).json({ message: 'File not found in private vault storage.' });
   }
 
@@ -5498,7 +5519,7 @@ app.get('/api/admin/employees/:id/documents/:docId/download', authenticateToken,
   return res.sendFile(filePath);
 });
 
-app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requirePermission(['employee_kyc.manage', 'employees.manage']), (req, res) => {
+app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requirePermission(['employee_kyc.manage', 'employees.manage']), async (req, res) => {
   const { id, docId } = req.params;
   const emp = findEmployee(id);
   const canonicalId = emp ? emp.id : id;
@@ -5510,13 +5531,13 @@ app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requi
 
   const doc = dbState.employeeDocuments[idx];
   const filePath = path.join(PRIVATE_UPLOADS_DIR, doc.privateFileKey);
-  if (fs.existsSync(filePath)) {
+  if (fs.existsSync && fs.existsSync(filePath)) {
     try { fs.unlinkSync(filePath); } catch (e) { console.error('Error deleting private file:', e); }
   }
 
   dbState.employeeDocuments.splice(idx, 1);
   logAudit(req, 'SENSITIVE_DOCUMENT_DELETED', `Deleted private document: ${doc.documentName}`, canonicalId, docId);
-  persistDatabase('employeeDocuments', docId);
+  await persistDatabase('employeeDocuments', docId);
 
   res.json({ message: 'Document deleted from private vault.' });
 });
@@ -5533,7 +5554,7 @@ app.get('/api/admin/employees/:id/account', authenticateToken, requirePermission
   res.json(acc);
 });
 
-app.post('/api/admin/employees/:id/account', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), (req, res) => {
+app.post('/api/admin/employees/:id/account', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), async (req, res) => {
   const { id } = req.params;
   const { systemEmail, password, role, accountStatus, permissions } = req.body;
 
@@ -5604,13 +5625,13 @@ app.post('/api/admin/employees/:id/account', authenticateToken, requirePermissio
   });
 
   logAudit(req, 'EMPLOYEE_ACCOUNT_UPDATED', `Configured system login account and RBAC permissions for employee ${canonicalId} (${systemEmail})`, canonicalId);
-  persistDatabase('employeeAccounts', canonicalId);
+  await persistDatabase('employeeAccounts', canonicalId);
 
   const { password: _, ...cleanUser } = userObj || {};
   res.json({ message: 'Employee system account configured successfully.', account: updatedAccount, user: cleanUser });
 });
 
-app.put('/api/admin/employees/:id/account/status', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), (req, res) => {
+app.put('/api/admin/employees/:id/account/status', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), async (req, res) => {
   const { id } = req.params;
   const { accountStatus } = req.body;
   const emp = findEmployee(id);
@@ -5623,12 +5644,12 @@ app.put('/api/admin/employees/:id/account/status', authenticateToken, requirePer
 
   const updated = setEmployeeAccount(canonicalId, { accountStatus: accountStatus || 'Active' });
   logAudit(req, 'EMPLOYEE_ACCOUNT_STATUS_CHANGED', `Changed account status to ${accountStatus} for employee ${canonicalId}`, canonicalId);
-  persistDatabase('employeeAccounts', canonicalId);
+  await persistDatabase('employeeAccounts', canonicalId);
 
   res.json({ message: 'Account status updated.', account: updated });
 });
 
-app.put('/api/admin/employees/:id/account/reset-password', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), (req, res) => {
+app.put('/api/admin/employees/:id/account/reset-password', authenticateToken, requirePermission(['staff_accounts.manage', 'employees.manage']), async (req, res) => {
   const { id } = req.params;
   const { newPassword } = req.body;
 
@@ -5655,7 +5676,7 @@ app.put('/api/admin/employees/:id/account/reset-password', authenticateToken, re
   }
 
   logAudit(req, 'EMPLOYEE_PASSWORD_RESET', `Reset login password for employee ${canonicalId} (${acc.systemEmail})`, canonicalId);
-  persistDatabase('users', userObj.id);
+  await persistDatabase('users', userObj.id);
 
   res.json({ message: 'Password reset successfully for employee system account.' });
 });
@@ -5937,7 +5958,7 @@ app.post('/api/security/report-scam', async (req, res) => {
   res.status(201).json({ message: 'Scam incident report submitted successfully to EasyDesk Security Team.', report });
 });
 
-app.post('/api/security/request-data-deletion', (req, res) => {
+app.post('/api/security/request-data-deletion', async (req, res) => {
   const { customerName, customerEmail, customerPhone, orderId, reason } = req.body;
   if (!customerName || !customerEmail) {
     return res.status(400).json({ message: 'Name and Email are required for data deletion requests.' });
@@ -5954,7 +5975,7 @@ app.post('/api/security/request-data-deletion', (req, res) => {
   };
   if (!dbState.dataDeletionRequests) dbState.dataDeletionRequests = [];
   dbState.dataDeletionRequests.unshift(deletionReq);
-  persistDatabase();
+  await persistDatabase('auditLogs', deletionReq.id);
   res.status(201).json({ message: 'Data deletion request recorded. Our Security Officer will process your purge within 24-48 business hours.', request: deletionReq });
 });
 
@@ -5966,21 +5987,21 @@ app.get('/api/admin/data-deletion-requests', authenticateToken, requireRole([Use
   res.json(dbState.dataDeletionRequests || []);
 });
 
-app.patch('/api/admin/scam-reports/:id', authenticateToken, requireRole([UserRole.ADMIN]), (req, res) => {
+app.patch('/api/admin/scam-reports/:id', authenticateToken, requireRole([UserRole.ADMIN]), async (req, res) => {
   const { status } = req.body;
   const report = (dbState.scamReports || []).find((r: any) => r.id === req.params.id);
   if (!report) return res.status(404).json({ message: 'Report not found' });
   report.status = status || report.status;
-  persistDatabase();
+  await persistDatabase('auditLogs', report.id);
   res.json(report);
 });
 
-app.patch('/api/admin/data-deletion-requests/:id', authenticateToken, requireRole([UserRole.ADMIN]), (req, res) => {
+app.patch('/api/admin/data-deletion-requests/:id', authenticateToken, requireRole([UserRole.ADMIN]), async (req, res) => {
   const { status } = req.body;
   const reqObj = (dbState.dataDeletionRequests || []).find((d: any) => d.id === req.params.id);
   if (!reqObj) return res.status(404).json({ message: 'Request not found' });
   reqObj.status = status || reqObj.status;
-  persistDatabase();
+  await persistDatabase('auditLogs', reqObj.id);
   res.json(reqObj);
 });
 
@@ -6006,7 +6027,7 @@ app.get('/api/master-data', (req, res) => {
   });
 });
 
-app.post('/api/admin/master-data', (req, res) => {
+app.post('/api/admin/master-data', async (req, res) => {
   const { departments, designations, employmentTypes, workLocations, employeeStatuses, documentTypes, banks, updaterId, updaterName, updaterRole } = req.body;
   if (!dbState.masterData) {
     dbState.masterData = JSON.parse(JSON.stringify(PRESEEDED_MASTER_DATA));
@@ -6032,7 +6053,7 @@ app.post('/api/admin/master-data', (req, res) => {
   if (Array.isArray(banks)) {
     dbState.masterData.banks = Array.from(new Set(banks.map((d: string) => d.trim()).filter(Boolean)));
   }
-  persistDatabase();
+  await persistDatabase('masterData');
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'MASTER_DATA_UPDATE', 'Updated Master Data records.');
   res.json({ message: 'Master data updated successfully.', masterData: dbState.masterData });
 });
@@ -6049,7 +6070,7 @@ app.get('/api/admin/customers/:id', (req, res) => {
   res.json(cust);
 });
 
-app.post('/api/admin/customers', (req, res) => {
+app.post('/api/admin/customers', async (req, res) => {
   if (!dbState.customers) dbState.customers = [];
   const existing = findCustomer(req.body.id || req.body.code || req.body.email || req.body.mobile);
   const custId = existing ? existing.id : (req.body.id || `cust-${Date.now()}`);
@@ -6071,12 +6092,12 @@ app.post('/api/admin/customers', (req, res) => {
     dbState.customers.push(newCust);
   }
 
-  persistDatabase('customers', custId);
+  await persistDatabase('customers', custId);
   logSystemAction('admin-1', 'Admin', 'ADMIN', 'CUSTOMER_RECORD_CREATE', `Created/updated customer record for ${newCust.name} (${newCust.code})`);
   res.status(201).json(newCust);
 });
 
-app.put('/api/admin/customers/:id', (req, res) => {
+app.put('/api/admin/customers/:id', async (req, res) => {
   const cust = findCustomer(req.params.id);
   if (!cust) return res.status(404).json({ message: 'Customer record not found' });
 
@@ -6090,23 +6111,23 @@ app.put('/api/admin/customers/:id', (req, res) => {
     code: cust.code,
     updatedAt: new Date().toISOString()
   };
-  persistDatabase('customers', cust.id);
+  await persistDatabase('customers', cust.id);
   logSystemAction('admin-1', 'Admin', 'ADMIN', 'CUSTOMER_RECORD_UPDATE', `Updated customer record for ${dbState.customers[idx].name}`);
   res.json(dbState.customers[idx]);
 });
 
-app.patch('/api/admin/customers/:id/status', (req, res) => {
+app.patch('/api/admin/customers/:id/status', async (req, res) => {
   const cust = findCustomer(req.params.id);
   if (!cust) return res.status(404).json({ message: 'Customer record not found' });
 
   cust.status = req.body.status || cust.status;
   cust.updatedAt = new Date().toISOString();
-  persistDatabase('customers', cust.id);
+  await persistDatabase('customers', cust.id);
   logSystemAction('admin-1', 'Admin', 'ADMIN', 'CUSTOMER_STATUS_TOGGLE', `Updated customer ${cust.name} status to ${cust.status}`);
   res.json(cust);
 });
 
-app.delete('/api/admin/customers/:id', (req, res) => {
+app.delete('/api/admin/customers/:id', async (req, res) => {
   const cust = findCustomer(req.params.id);
   if (!cust) return res.status(404).json({ message: 'Customer record not found' });
 
@@ -6114,7 +6135,7 @@ app.delete('/api/admin/customers/:id', (req, res) => {
   if (idx === -1) return res.status(404).json({ message: 'Customer record not found' });
 
   const deleted = dbState.customers.splice(idx, 1)[0];
-  persistDatabase('customers', cust.id);
+  await persistDatabase('customers', cust.id);
   logSystemAction('admin-1', 'Admin', 'ADMIN', 'CUSTOMER_RECORD_DELETE', `Deleted customer record for ${deleted.name}`);
   res.json({ message: 'Customer record deleted successfully', deleted });
 });
@@ -6207,7 +6228,7 @@ app.post('/api/admin/orders', authenticateToken, requireRole(['SUPER_ADMIN', 'AD
 
         if (!dbState.customers) dbState.customers = [];
         dbState.customers.push(targetCustomer);
-        persistDatabase('customers', newCustId);
+        await persistDatabase('customers', newCustId);
         logSystemAction(user.id, user.name, user.role, 'CUSTOMER_CREATED_MANUAL_ORDER', `Created customer profile ${targetCustomer.name} (${targetCustomer.code}) during manual ${orderSource} order creation.`);
       }
     }
@@ -6297,7 +6318,7 @@ app.post('/api/admin/orders', authenticateToken, requireRole(['SUPER_ADMIN', 'AD
     if (!dbState.orders) dbState.orders = [];
     dbState.orders.unshift(newOrder);
 
-    persistDatabase('orders', orderId);
+    await persistDatabase('orders', orderId);
     logSystemAction(
       user.id,
       user.name,
@@ -6378,7 +6399,7 @@ app.put('/api/admin/orders/:id', authenticateToken, requireRole(['SUPER_ADMIN', 
       timestamp: new Date().toISOString()
     });
 
-    persistDatabase('orders', order.id);
+    await persistDatabase('orders', order.id);
     logSystemAction(user.id, user.name, user.role, 'ORDER_DETAILS_UPDATED', `Updated details for order ${order.id} (${order.name}).`);
 
     res.json({ message: 'Order updated successfully.', order });
@@ -6389,7 +6410,7 @@ app.put('/api/admin/orders/:id', authenticateToken, requireRole(['SUPER_ADMIN', 
 });
 
 // POST Create New Order for Existing Customer (Legacy helper route)
-app.post('/api/admin/customers/:id/orders', (req, res) => {
+app.post('/api/admin/customers/:id/orders', async (req, res) => {
   const cust = findCustomer(req.params.id);
   if (!cust) return res.status(404).json({ message: 'Customer record not found' });
 
@@ -6449,7 +6470,7 @@ app.post('/api/admin/customers/:id/orders', (req, res) => {
   if (!dbState.orders) dbState.orders = [];
   dbState.orders.unshift(newOrder);
 
-  persistDatabase('orders', orderId);
+  await persistDatabase('orders', orderId);
   logSystemAction('admin-1', 'Admin', 'ADMIN', 'ORDER_CREATE_FOR_CUSTOMER', `Recorded new order ${orderId} (${service.title}) for customer ${cust.name}`);
 
   res.status(201).json(newOrder);
