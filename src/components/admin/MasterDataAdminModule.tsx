@@ -45,7 +45,9 @@ export default function MasterDataAdminModule({ adminFetch, triggerAlert }: Mast
         }));
       }
     } catch (err) {
-      console.error('Error loading master data:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Error loading master data:', err);
+      }
     } finally {
       setLoading(false);
     }

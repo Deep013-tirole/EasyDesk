@@ -63,18 +63,24 @@ export default function PaymentView({
             return;
           }
         }
-      } catch (err) {
-        console.warn('Failed to load payment config via API:', err);
+      } catch (err: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load payment config via API:', err?.message || err);
+        }
       }
 
       // Authoritative Direct Firestore fallback
       try {
-        const directPay = await getClientPaymentConfig();
-        if (directPay && isMounted) {
-          setPaymentConfig(prev => ({ ...prev, ...directPay }));
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const directPay = await getClientPaymentConfig();
+          if (directPay && isMounted) {
+            setPaymentConfig(prev => ({ ...prev, ...directPay }));
+          }
         }
-      } catch (fsErr) {
-        console.warn('Failed to load direct Firestore payment config:', fsErr);
+      } catch (fsErr: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load direct Firestore payment config:', fsErr?.message || fsErr);
+        }
       }
     };
 

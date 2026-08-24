@@ -5,15 +5,18 @@ import {
 } from 'lucide-react';
 import { Review } from '../../types';
 import { apiFetch } from '../../lib/apiClient.js';
-import { invalidateReviewsCache } from '../../services/catalogService.js';
+import { invalidateReviewsCache, getCachedCatalog, CATALOG_CACHE_KEYS } from '../../services/catalogService.js';
 
 interface ReviewsAdminModuleProps {
+  initialReviews?: Review[];
   onReviewsChange?: (reviews: Review[]) => void;
   onRefreshCatalogs?: () => void;
 }
 
-export default function ReviewsAdminModule({ onReviewsChange, onRefreshCatalogs }: ReviewsAdminModuleProps = {}) {
-  const [reviews, setReviews] = useState<Review[]>([]);
+export default function ReviewsAdminModule({ initialReviews, onReviewsChange, onRefreshCatalogs }: ReviewsAdminModuleProps = {}) {
+  const [reviews, setReviews] = useState<Review[]>(() => 
+    initialReviews || getCachedCatalog<Review[]>(CATALOG_CACHE_KEYS.REVIEWS, [])
+  );
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<'All' | 'Pending' | 'Approved' | 'Rejected' | 'Hidden' | 'Demo' | 'Customer'>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,13 +62,26 @@ export default function ReviewsAdminModule({ onReviewsChange, onRefreshCatalogs 
       const res = await apiFetch('/api/admin/reviews');
       if (res.ok) {
         const data = await res.json();
-        setReviews(data || []);
-        if (onReviewsChange) onReviewsChange(data || []);
-      } else {
-        setErrorMsg('Failed to load reviews list.');
+        if (Array.isArray(data)) {
+          setReviews(data);
+          if (onReviewsChange) onReviewsChange(data);
+          return;
+        }
+      }
+      
+      // Fallback to initialReviews if offline
+      if (initialReviews && initialReviews.length > 0) {
+        setReviews(initialReviews);
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Error fetching reviews.');
+      if (initialReviews && initialReviews.length > 0) {
+        setReviews(initialReviews);
+      } else {
+        const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        if (!isOffline) {
+          setErrorMsg(err?.message || 'Error fetching reviews.');
+        }
+      }
     } finally {
       setLoading(false);
     }

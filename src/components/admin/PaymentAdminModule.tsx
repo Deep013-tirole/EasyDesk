@@ -25,13 +25,15 @@ export default function PaymentAdminModule() {
 
   const fetchPaymentConfig = async () => {
     try {
-      const res = await fetch('/api/payment-settings');
+      const res = await fetch(`/api/payment-settings?_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        setPaymentConfig(data);
+        if (data && typeof data === 'object') setPaymentConfig(data);
       }
     } catch (err) {
-      console.error('Failed fetching payment settings:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Failed fetching payment settings:', err);
+      }
     } finally {
       setLoading(false);
     }

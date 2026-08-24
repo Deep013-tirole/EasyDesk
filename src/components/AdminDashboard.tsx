@@ -209,10 +209,26 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       headers['x-csrf-token'] = csrfToken;
     }
 
-    let response = await fetch(input, {
-      ...init,
-      headers
-    });
+    let response: Response;
+    try {
+      response = await fetch(input, {
+        ...init,
+        headers
+      });
+    } catch (netErr: any) {
+      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (!isOffline) {
+        console.warn('[AdminDashboard] Fetch error for', input, netErr?.message || netErr);
+      }
+      return new Response(JSON.stringify({ 
+        message: 'Network offline / connection unavailable', 
+        offline: true 
+      }), {
+        status: 503,
+        statusText: 'Service Unavailable (Offline)',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     if (response.status === 401 || response.status === 403) {
       const clone = response.clone();
@@ -2379,7 +2395,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
 
           {/* Active Tab 4.5: Customer Reviews Moderation */}
           {activeTab === 'reviews' && (
-            <ReviewsAdminModule onReviewsChange={setReviews} onRefreshCatalogs={onRefreshCatalogs} />
+            <ReviewsAdminModule initialReviews={reviews} onReviewsChange={setReviews} onRefreshCatalogs={onRefreshCatalogs} />
           )}
 
           {/* Active Tab 5: FAQs Help */}

@@ -85,18 +85,24 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
             return;
           }
         }
-      } catch (err) {
-        console.warn('Failed to load contact settings via API:', err);
+      } catch (err: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load contact settings via API:', err?.message || err);
+        }
       }
 
       // Authoritative Direct Firestore Fallback
       try {
-        const directContact = await getClientContactSettings();
-        if (directContact && isMounted) {
-          setContactInfo(prev => ({ ...prev, ...directContact }));
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const directContact = await getClientContactSettings();
+          if (directContact && isMounted) {
+            setContactInfo(prev => ({ ...prev, ...directContact }));
+          }
         }
-      } catch (fsErr) {
-        console.warn('Failed to load direct Firestore contact settings:', fsErr);
+      } catch (fsErr: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load direct Firestore contact settings:', fsErr?.message || fsErr);
+        }
       }
     };
 

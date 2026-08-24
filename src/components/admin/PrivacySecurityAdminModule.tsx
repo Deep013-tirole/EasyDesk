@@ -26,30 +26,34 @@ export default function PrivacySecurityAdminModule() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resConfig, resScams, resPurges] = await Promise.all([
-        fetch('/api/privacy-security'),
-        fetch('/api/admin/scam-reports', {
+      const results = await Promise.allSettled([
+        fetch(`/api/privacy-security?_t=${Date.now()}`),
+        fetch(`/api/admin/scam-reports?_t=${Date.now()}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('easydesk_admin_token')}` }
         }),
-        fetch('/api/admin/data-deletion-requests', {
+        fetch(`/api/admin/data-deletion-requests?_t=${Date.now()}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('easydesk_admin_token')}` }
         })
       ]);
 
-      if (resConfig.ok) {
-        const json = await resConfig.json();
-        setData(json);
+      const [resConfig, resScams, resPurges] = results;
+
+      if (resConfig.status === 'fulfilled' && resConfig.value.ok) {
+        const json = await resConfig.value.json();
+        if (json && typeof json === 'object') setData(json);
       }
-      if (resScams.ok) {
-        const jsonScams = await resScams.json();
-        setScamReports(jsonScams);
+      if (resScams.status === 'fulfilled' && resScams.value.ok) {
+        const jsonScams = await resScams.value.json();
+        if (Array.isArray(jsonScams)) setScamReports(jsonScams);
       }
-      if (resPurges.ok) {
-        const jsonPurges = await resPurges.json();
-        setPurgeRequests(jsonPurges);
+      if (resPurges.status === 'fulfilled' && resPurges.value.ok) {
+        const jsonPurges = await resPurges.value.json();
+        if (Array.isArray(jsonPurges)) setPurgeRequests(jsonPurges);
       }
     } catch (err) {
-      console.error('Failed to load Privacy Admin content:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Failed to load Privacy Admin content:', err);
+      }
     } finally {
       setLoading(false);
     }

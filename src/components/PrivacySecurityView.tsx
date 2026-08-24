@@ -251,19 +251,25 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
             return;
           }
         }
-      } catch (err) {
-        console.warn('API fetch for privacy-security failed, trying direct Firestore:', err);
+      } catch (err: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('API fetch for privacy-security failed, trying direct Firestore:', err?.message || err);
+        }
       }
 
       // 2. Direct Firestore Authoritative Read Fallback
       try {
-        const firestoreData = await getClientPrivacySecurity();
-        if (firestoreData && firestoreData.hero) {
-          setData(firestoreData);
-          return;
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const firestoreData = await getClientPrivacySecurity();
+          if (firestoreData && firestoreData.hero) {
+            setData(firestoreData);
+            return;
+          }
         }
-      } catch (fsErr) {
-        console.warn('Direct Firestore fetch for privacy-security failed:', fsErr);
+      } catch (fsErr: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Direct Firestore fetch for privacy-security failed:', fsErr?.message || fsErr);
+        }
       }
 
       // 3. Guaranteed Default Schema Fallback (Never leaves page blank)

@@ -13,13 +13,26 @@ function withTimeout<T>(promise: Promise<T>, ms = 6000, fallback: T): Promise<T>
   ]);
 }
 
+function isNetworkOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function handleFirestoreError(context: string, err: any) {
+  const isOffline = isNetworkOffline();
+  const isUnavailable = err?.code === 'unavailable' || err?.message?.includes('offline') || err?.message?.includes('network') || err?.message?.includes('Failed to fetch');
+  if (!isOffline && !isUnavailable) {
+    console.warn(`[FirestoreClient] ${context}:`, err);
+  }
+}
+
 /**
  * Loads all services directly from Firestore
  */
 export async function getClientServices(): Promise<Service[]> {
+  if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'services');
-    const snapshot = await withTimeout(getDocs(q), 6000, null);
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
     if (!snapshot || snapshot.empty) return [];
     
     const list: Service[] = [];
@@ -30,7 +43,7 @@ export async function getClientServices(): Promise<Service[]> {
     });
     return list.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
   } catch (err) {
-    console.warn('[FirestoreClient] Error fetching services:', err);
+    handleFirestoreError('Error fetching services', err);
     return [];
   }
 }
@@ -39,9 +52,10 @@ export async function getClientServices(): Promise<Service[]> {
  * Loads all service categories directly from Firestore
  */
 export async function getClientCategories(includeAll = false): Promise<ServiceCategory[]> {
+  if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'categories');
-    const snapshot = await withTimeout(getDocs(q), 6000, null);
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: ServiceCategory[] = [];
@@ -54,7 +68,7 @@ export async function getClientCategories(includeAll = false): Promise<ServiceCa
     const filtered = includeAll ? list : list.filter(c => c.status !== 'Inactive');
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   } catch (err) {
-    console.warn('[FirestoreClient] Error fetching categories:', err);
+    handleFirestoreError('Error fetching categories', err);
     return [];
   }
 }
@@ -63,9 +77,10 @@ export async function getClientCategories(includeAll = false): Promise<ServiceCa
  * Loads all blog categories directly from Firestore
  */
 export async function getClientBlogCategories(includeAll = false): Promise<BlogCategory[]> {
+  if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'blogCategories');
-    const snapshot = await withTimeout(getDocs(q), 6000, null);
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: BlogCategory[] = [];
@@ -78,7 +93,7 @@ export async function getClientBlogCategories(includeAll = false): Promise<BlogC
     const filtered = includeAll ? list : list.filter(c => c.status !== 'Inactive');
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   } catch (err) {
-    console.warn('[FirestoreClient] Error fetching blog categories:', err);
+    handleFirestoreError('Error fetching blog categories', err);
     return [];
   }
 }
@@ -87,9 +102,10 @@ export async function getClientBlogCategories(includeAll = false): Promise<BlogC
  * Loads all blogs directly from Firestore
  */
 export async function getClientBlogs(): Promise<Blog[]> {
+  if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'blogs');
-    const snapshot = await withTimeout(getDocs(q), 6000, null);
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: Blog[] = [];
@@ -100,7 +116,7 @@ export async function getClientBlogs(): Promise<Blog[]> {
     });
     return list.sort((a, b) => new Date(b.publishedAt || b.date || 0).getTime() - new Date(a.publishedAt || a.date || 0).getTime());
   } catch (err) {
-    console.warn('[FirestoreClient] Error fetching blogs:', err);
+    handleFirestoreError('Error fetching blogs', err);
     return [];
   }
 }
@@ -109,9 +125,10 @@ export async function getClientBlogs(): Promise<Blog[]> {
  * Loads all reviews directly from Firestore
  */
 export async function getClientReviews(): Promise<Review[]> {
+  if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'reviews');
-    const snapshot = await withTimeout(getDocs(q), 6000, null);
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: Review[] = [];
@@ -122,7 +139,7 @@ export async function getClientReviews(): Promise<Review[]> {
     });
     return list.filter(r => r.status === 'Approved' || (r as any).status === undefined);
   } catch (err) {
-    console.warn('[FirestoreClient] Error fetching reviews:', err);
+    handleFirestoreError('Error fetching reviews', err);
     return [];
   }
 }
@@ -132,15 +149,22 @@ export async function getClientReviews(): Promise<Review[]> {
  */
 export async function getClientSetting<T = any>(settingKey: string): Promise<T | null> {
   try {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return null;
+    }
     const docRef = doc(db, 'settings', settingKey);
-    const snap = await withTimeout(getDoc(docRef), 6000, null);
+    const snap = await withTimeout(getDoc(docRef), 4000, null);
     if (snap && snap.exists()) {
       const data = snap.data();
       delete data._updatedAt;
       return data as T;
     }
-  } catch (err) {
-    console.warn(`[FirestoreClient] Error fetching setting ${settingKey}:`, err);
+  } catch (err: any) {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const isUnavailable = err?.code === 'unavailable' || err?.message?.includes('offline') || err?.message?.includes('network');
+    if (!isOffline && !isUnavailable) {
+      console.warn(`[FirestoreClient] Error fetching setting ${settingKey}:`, err);
+    }
   }
   return null;
 }
@@ -156,7 +180,7 @@ export async function getClientPrivacySecurity(): Promise<any> {
     const direct2 = await getClientSetting('privacySecuritySettings');
     if (direct2 && direct2.hero) return direct2;
   } catch (err) {
-    console.warn('[FirestoreClient] Error loading Privacy & Security:', err);
+    handleFirestoreError('Error loading Privacy & Security', err);
   }
   return null;
 }
@@ -172,7 +196,7 @@ export async function getClientPaymentConfig(): Promise<any> {
     const pay2 = await getClientSetting('paymentSettings');
     if (pay2 && (pay2.upiId || pay2.bankName || pay2.accountNumber)) return pay2;
   } catch (err) {
-    console.warn('[FirestoreClient] Error loading Payment Config:', err);
+    handleFirestoreError('Error loading Payment Config', err);
   }
   return null;
 }
@@ -185,7 +209,7 @@ export async function getClientContactSettings(): Promise<any> {
     const contact = await getClientSetting('contactSettings');
     if (contact && (contact.phone || contact.email || contact.companyName)) return contact;
   } catch (err) {
-    console.warn('[FirestoreClient] Error loading Contact Settings:', err);
+    handleFirestoreError('Error loading Contact Settings', err);
   }
   return null;
 }
@@ -201,7 +225,7 @@ export async function getClientAboutUs(): Promise<{ aboutUs: any; founder: any }
     ]);
     return { aboutUs, founder };
   } catch (err) {
-    console.warn('[FirestoreClient] Error loading About Us:', err);
+    handleFirestoreError('Error loading About Us', err);
     return { aboutUs: null, founder: null };
   }
 }

@@ -22,6 +22,7 @@ import { useCatalog } from './hooks/useCatalog.js';
 import { useScrollToTopOnChange } from './lib/scrollUtils.js';
 import { auth, onAuthStateChanged } from './lib/firebaseClient.js';
 import { LanguageProvider } from './context/LanguageContext.js';
+import { WifiOff, RefreshCw } from 'lucide-react';
 
 function ViewLoadingFallback() {
   return (
@@ -37,12 +38,20 @@ export default function App() {
   // Routing state
   const [view, setView] = useState<string>('home');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   // Global scroll-to-top on route / main view transition
   useScrollToTopOnChange([view, selectedServiceId]);
 
   // Admin user state
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const savedAdmin = localStorage.getItem('easydesk_admin_user');
+      return savedAdmin ? JSON.parse(savedAdmin) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // App Catalog database with automatic localStorage cache fallback
   const {
@@ -56,6 +65,25 @@ export default function App() {
     loading,
     refetchAll: fetchPlatformCatalogs
   } = useCatalog();
+
+  // Network connectivity status listener & auto-resync
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      fetchPlatformCatalogs();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [fetchPlatformCatalogs]);
 
   // Helper to parse route from browser URL
   const parseRouteFromLocation = useCallback(() => {
@@ -253,6 +281,13 @@ export default function App() {
     <LanguageProvider>
       <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans select-none antialiased">
         
+        {!isOnline && (
+          <div className="bg-amber-600 text-white text-[11px] font-semibold py-1.5 px-4 flex items-center justify-center gap-2 shadow-xs z-50 animate-in fade-in">
+            <WifiOff className="w-3.5 h-3.5" />
+            <span>You are currently offline. Displaying cached data. Reconnecting automatically when internet is available...</span>
+          </div>
+        )}
+
         {/* Universal header with navigation */}
         <Header 
           currentView={view} 

@@ -35,19 +35,21 @@ export default function ContactUsAdminModule() {
 
   const fetchContactModuleData = async () => {
     try {
-      const res = await fetch('/api/contact-settings');
+      const res = await fetch(`/api/contact-settings?_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        setContactSettings(data);
+        if (data && typeof data === 'object') setContactSettings(data);
       }
 
-      const msgRes = await fetch('/api/admin/contact-messages');
+      const msgRes = await fetch(`/api/admin/contact-messages?_t=${Date.now()}`);
       if (msgRes.ok) {
         const msgData = await msgRes.json();
-        setMessages(msgData);
+        if (Array.isArray(msgData)) setMessages(msgData);
       }
     } catch (err) {
-      console.error('Failed loading contact module data:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Failed loading contact module data:', err);
+      }
     } finally {
       setLoading(false);
     }

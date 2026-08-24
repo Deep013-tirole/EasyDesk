@@ -110,10 +110,14 @@ export default function CustomerManagementModule({
       const res = await adminFetch('/api/admin/customers');
       if (res.ok) {
         const data = await res.json();
-        setCustomers(data);
+        if (Array.isArray(data)) {
+          setCustomers(data);
+        }
       }
     } catch (err) {
-      console.error('Error fetching customers:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Error fetching customers:', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -130,7 +134,11 @@ export default function CustomerManagementModule({
       adminFetch('/api/services')
         .then(res => res.ok ? res.json() : [])
         .then(data => { if (Array.isArray(data)) setAvailableServices(data); })
-        .catch(err => console.error('Failed to fetch services list:', err));
+        .catch(err => {
+          if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+            console.warn('Failed to fetch services list:', err);
+          }
+        });
     }
   }, [servicesProp]);
 
@@ -141,12 +149,14 @@ export default function CustomerManagementModule({
       const res = await adminFetch(`/api/admin/customers/${cust.id}/orders`);
       if (res.ok) {
         const data = await res.json();
-        setCustomerOrders(data);
+        setCustomerOrders(Array.isArray(data) ? data : []);
       } else {
         setCustomerOrders([]);
       }
     } catch (err) {
-      console.error('Error fetching customer service history:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Error fetching customer service history:', err);
+      }
       setCustomerOrders([]);
     } finally {
       setLoadingOrders(false);

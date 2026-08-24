@@ -119,10 +119,14 @@ export default function EmployeeManagementModule({ adminFetch, triggerAlert, mas
       const res = await adminFetch('/api/admin/employees');
       if (res.ok) {
         const data = await res.json();
-        setEmployees(data);
+        if (Array.isArray(data)) {
+          setEmployees(data);
+        }
       }
     } catch (err) {
-      console.error('Error fetching employee records:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Error fetching employee records:', err);
+      }
     } finally {
       setLoading(false);
     }

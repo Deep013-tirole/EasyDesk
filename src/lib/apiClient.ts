@@ -77,25 +77,50 @@ export async function apiFetch(endpoint: string, options: RequestOptions = {}): 
     ...restOptions,
   };
 
-  const response = await fetch(endpoint, config);
+  try {
+    const response = await fetch(endpoint, config);
 
-  if (!response.ok) {
-    const status = response.status;
-    let backendError = response.statusText;
-    try {
-      const cloned = response.clone();
-      const errJson = await safeParseJsonResponse<any>(cloned);
-      if (errJson && errJson.message) backendError = errJson.message;
-    } catch {}
+    if (!response.ok) {
+      const status = response.status;
+      let backendError = response.statusText;
+      try {
+        const cloned = response.clone();
+        const errJson = await safeParseJsonResponse<any>(cloned);
+        if (errJson && errJson.message) backendError = errJson.message;
+      } catch {}
 
-    console.warn(`[EasyDesk API Notice]
-Endpoint: ${endpoint}
-Method: ${method}
-Status: ${status}
-Reason: ${backendError}`);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn(`[EasyDesk API Notice] Endpoint: ${endpoint} | Method: ${method} | Status: ${status} | Reason: ${backendError}`);
+      }
+    }
+
+    return response;
+  } catch (netErr: any) {
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const isConnErr = netErr?.message?.includes('Failed to fetch') || netErr?.message?.includes('NetworkError') || netErr?.message?.includes('offline');
+
+    if (!isOffline && !isConnErr) {
+      console.warn(`[EasyDesk Network] ${method} ${endpoint} failed:`, netErr?.message || netErr);
+    }
+
+    // For GET requests, return a clean non-throwing 503 response with offline indicator
+    if (method.toUpperCase() === 'GET') {
+      return new Response(JSON.stringify({ 
+        message: 'Network offline / connection unavailable', 
+        offline: true 
+      }), {
+        status: 503,
+        statusText: 'Service Unavailable (Offline)',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // For write/mutation actions, throw a clear human-readable error
+    throw new Error(isOffline 
+      ? 'You are currently offline. Please reconnect to the internet and try again.' 
+      : 'Network request failed. Please check your internet connection and try again.'
+    );
   }
-
-  return response;
 }
 
 export async function adminFetch(endpoint: string, options: RequestOptions = {}): Promise<Response> {

@@ -165,19 +165,25 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
             return;
           }
         }
-      } catch (err) {
-        console.warn('Failed to load About Us content via API:', err);
+      } catch (err: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load About Us content via API:', err?.message || err);
+        }
       }
 
       // Authoritative Direct Firestore Fallback
       try {
-        const directAbout = await getClientAboutUs();
-        if (isMounted) {
-          if (directAbout.aboutUs) setAboutData(directAbout.aboutUs);
-          if (directAbout.founder) setFounder(directAbout.founder);
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const directAbout = await getClientAboutUs();
+          if (isMounted) {
+            if (directAbout.aboutUs) setAboutData(directAbout.aboutUs);
+            if (directAbout.founder) setFounder(directAbout.founder);
+          }
         }
-      } catch (fsErr) {
-        console.warn('Failed to load direct Firestore About Us:', fsErr);
+      } catch (fsErr: any) {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          console.warn('Failed to load direct Firestore About Us:', fsErr?.message || fsErr);
+        }
       }
     };
 

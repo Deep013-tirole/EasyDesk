@@ -126,19 +126,25 @@ export async function fetchWithCache<T>(
       }
     }
   } catch (err: any) {
-    console.warn(`[CatalogService] Network fetch failed for ${endpoint}. Checking Cloud Firestore directly.`, err?.message || err);
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (!isOffline) {
+      console.warn(`[CatalogService] Network fetch failed for ${endpoint}. Checking Cloud Firestore directly.`, err?.message || err);
+    }
   }
 
   // Authoritative Direct Firestore Fallback
-  if (directFirestoreLoader) {
+  if (directFirestoreLoader && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
     try {
       const firestoreData = await directFirestoreLoader();
       if (firestoreData !== null && firestoreData !== undefined) {
         setCachedCatalog(cacheKey, firestoreData);
         return { data: firestoreData, isCached: false };
       }
-    } catch (fsErr) {
-      console.warn(`[CatalogService] Direct Firestore fetch failed for ${cacheKey}:`, fsErr);
+    } catch (fsErr: any) {
+      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (!isOffline) {
+        console.warn(`[CatalogService] Direct Firestore fetch failed for ${cacheKey}:`, fsErr?.message || fsErr);
+      }
     }
   }
 

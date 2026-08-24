@@ -95,24 +95,30 @@ export default function AdminSettingsModule() {
 
       if (resContact && resContact.ok) {
         const cData = await resContact.json();
-        setContactSettings({
-          ...cData,
-          whatsapp: normalizeWhatsAppNumber(cData.whatsapp || '919876543210')
-        });
+        if (cData && typeof cData === 'object') {
+          setContactSettings({
+            ...cData,
+            whatsapp: normalizeWhatsAppNumber(cData.whatsapp || '919876543210')
+          });
+        }
       }
 
       if (resGen && resGen.ok) {
         const gData = await resGen.json();
-        setGeneralSettings(gData);
+        if (gData && typeof gData === 'object') setGeneralSettings(gData);
       }
 
       if (resMaster && resMaster.ok) {
         const mData = await resMaster.json();
-        setDepartments(mData.departments || []);
-        setDesignations(mData.designations || []);
+        if (mData) {
+          if (Array.isArray(mData.departments)) setDepartments(mData.departments);
+          if (Array.isArray(mData.designations)) setDesignations(mData.designations);
+        }
       }
     } catch (err) {
-      console.error('Failed fetching admin settings:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Failed fetching admin settings:', err);
+      }
     } finally {
       setLoading(false);
     }

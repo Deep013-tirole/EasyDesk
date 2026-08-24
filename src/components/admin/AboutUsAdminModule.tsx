@@ -41,14 +41,17 @@ export default function AboutUsAdminModule() {
 
   const fetchAllAboutData = async () => {
     try {
-      const res = await fetch('/api/about');
+      const res = await fetch(`/api/about?_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.aboutUs) setAboutUs(data.aboutUs);
-        if (data.founder) setFounder(data.founder);
+        if (data?.aboutUs) setAboutUs(data.aboutUs);
+        if (data?.founder) setFounder(data.founder);
+        return;
       }
     } catch (err) {
-      console.error('Failed fetching about data:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.warn('Failed fetching about data via API:', err);
+      }
     } finally {
       setLoading(false);
     }
