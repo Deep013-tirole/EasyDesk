@@ -81,6 +81,7 @@ export default function HomeView({
     workingHours: 'Mon - Sat: 9:00 AM - 6:30 PM',
     address: '402, Signature IT Park, Bandra Kurla Complex, Mumbai, MH, 400051'
   });
+  const [faqsList, setFaqsList] = useState(FAQS);
 
   useEffect(() => {
     const applyContact = (data: any) => {
@@ -94,9 +95,37 @@ export default function HomeView({
       }
     };
 
-    fetch('/api/contact-settings')
+    fetch(`/api/contact-settings?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    })
       .then(res => res.json())
       .then(data => applyContact(data))
+      .catch(() => {});
+
+    // Fetch dynamic FAQs
+    fetch(`/api/faqs?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((f: any) => ({
+            question: f.question || f.q || '',
+            answer: f.answer || f.a || ''
+          })).filter(f => f.question && f.answer);
+          if (mapped.length > 0) {
+            setFaqsList(mapped);
+          }
+        }
+      })
       .catch(() => {});
 
     const unsubscribe = onContactSettingsUpdated(applyContact);
@@ -119,7 +148,7 @@ export default function HomeView({
   const trustBadges = TRUST_BADGES;
   const whyChooseFeatures = WHY_CHOOSE_FEATURES;
   const govtEvents = GOVT_EVENTS;
-  const faqs = FAQS;
+  const faqs = faqsList;
 
   return (
     <div id="easydesk-home-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-16 overflow-hidden">

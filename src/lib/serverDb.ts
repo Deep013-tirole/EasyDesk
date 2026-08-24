@@ -90,7 +90,6 @@ export const ENTITY_COLLECTIONS = [
   'notifications',
   'users',
   'auditLogs',
-  'masterData',
   'coupons',
   'contactMessages',
   'scamReports',
@@ -112,6 +111,7 @@ export const SETTING_KEYS = [
   'paymentConfig',
   'settings',
   'adminProfileSettings',
+  'masterData',
 ] as const;
 
 /**
@@ -334,13 +334,9 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
         }
       }
     } else if (val && typeof val === 'object') {
-      if (collName === 'masterData') {
-        promises.push(saveFirestoreDoc(collName, 'data', val));
-      } else {
-        for (const [k, item] of Object.entries(val)) {
-          if (item && typeof item === 'object') {
-            promises.push(saveFirestoreDoc(collName, String(k), item));
-          }
+      for (const [k, item] of Object.entries(val)) {
+        if (item && typeof item === 'object') {
+          promises.push(saveFirestoreDoc(collName, String(k), item));
         }
       }
     }
@@ -349,7 +345,11 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
   // Seed settings
   for (const settingKey of SETTING_KEYS) {
     if (settingKey === 'system_init') continue;
-    if (settingKey === 'privacySecurity' || settingKey === 'privacySecuritySettings') {
+    if (settingKey === 'masterData') {
+      if (dbState.masterData) {
+        promises.push(saveFirestoreSetting('masterData', dbState.masterData));
+      }
+    } else if (settingKey === 'privacySecurity' || settingKey === 'privacySecuritySettings') {
       const privData = dbState.privacySecuritySettings || dbState.privacySecurity;
       if (privData !== undefined) {
         promises.push(saveFirestoreSetting(settingKey, privData));
@@ -471,14 +471,7 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
         console.warn(`[FIREBASE REST] Skipping collection ${collName} due to fetch error to preserve memory state.`);
         continue;
       }
-      if (collName === 'masterData') {
-        const masterDoc = items.find((d: any) => d.id === 'data' || d.departments || d.designations) || items[0];
-        if (masterDoc) {
-          const cleanMaster = { ...masterDoc };
-          delete cleanMaster.id;
-          stateFromDb[collName] = cleanMaster;
-        }
-      } else if (['employeeKYC', 'employeePayroll', 'employeeAccounts'].includes(collName)) {
+      if (['employeeKYC', 'employeePayroll', 'employeeAccounts'].includes(collName)) {
         const map: Record<string, any> = {};
         for (const item of items) {
           const key = item.employeeId || item.id;
@@ -520,6 +513,9 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       }
       if (key === 'companyProfile') {
         stateFromDb['companyProfile'] = val;
+      }
+      if (key === 'masterData') {
+        stateFromDb['masterData'] = val;
       }
     }
 
@@ -612,13 +608,6 @@ export async function persistFirestoreChange(
 
   // Check if it's an entity collection
   if ((ENTITY_COLLECTIONS as readonly string[]).includes(collectionOrKey)) {
-    if (collectionOrKey === 'masterData') {
-      if (dbState.masterData) {
-        await saveFirestoreDoc('masterData', 'data', dbState.masterData);
-      }
-      return;
-    }
-
     if (['employeeKYC', 'employeePayroll', 'employeeAccounts'].includes(collectionOrKey)) {
       const map = dbState[collectionOrKey];
       if (id && map) {

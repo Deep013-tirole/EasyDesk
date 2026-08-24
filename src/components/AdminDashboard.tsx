@@ -33,7 +33,7 @@ const EditOrderModal = lazy(() => import('./admin/EditOrderModal.js'));
 import { ServiceEditorModule } from './admin/ServiceEditorModule.js';
 import { BlogEditorModule } from './admin/BlogEditorModule.js';
 import { MediaInput } from './admin/MediaInput.js';
-import { fetchServicesWithCache, fetchCategoriesWithCache, fetchBlogCategoriesWithCache, fetchBlogsWithCache, setCachedCatalog, CATALOG_CACHE_KEYS } from '../services/catalogService.js';
+import { fetchServicesWithCache, fetchCategoriesWithCache, fetchBlogCategoriesWithCache, fetchBlogsWithCache, setCachedCatalog, invalidateAllCatalogsCache, CATALOG_CACHE_KEYS } from '../services/catalogService.js';
 import { useScrollToTopOnChange } from '../lib/scrollUtils.js';
 
 function AdminModuleFallback() {
@@ -734,6 +734,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
     triggerAlert(`Service "${serviceData.title}" ${isEditing ? 'updated' : 'created'} successfully!`);
     setIsServiceEditorOpen(false);
     setEditingService(null);
+    invalidateAllCatalogsCache();
     onRefreshCatalogs?.();
     fetchTabData();
   };
@@ -767,6 +768,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
     triggerAlert(`Article "${blogData.title}" ${isEditing ? 'updated' : 'published'} successfully!`);
     setIsBlogEditorOpen(false);
     setEditingBlog(null);
+    invalidateAllCatalogsCache();
     onRefreshCatalogs?.();
     fetchTabData();
   };
@@ -910,6 +912,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
         setIsFormOpen(false);
         triggerAlert(`Success: ${formType} table entry committed!`);
         if (['service', 'category', 'blog', 'faq', 'banner', 'page'].includes(formType)) {
+          invalidateAllCatalogsCache();
           onRefreshCatalogs?.();
         }
         fetchTabData();
@@ -941,6 +944,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       if (res.ok) {
         triggerAlert(`Deleted ${type} record successfully.`);
         if (['service', 'category', 'blog', 'faq', 'banner', 'page'].includes(type)) {
+          invalidateAllCatalogsCache();
           onRefreshCatalogs?.();
         }
         fetchTabData();
@@ -973,6 +977,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       });
       if (res.ok) {
         triggerAlert('Service duplicated successfully!');
+        invalidateAllCatalogsCache();
         onRefreshCatalogs?.();
         fetchTabData();
       }

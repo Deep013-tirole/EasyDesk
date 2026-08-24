@@ -260,6 +260,7 @@ export default function CategoryManagementAdminModule({
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
+        invalidateCategoriesCache();
         triggerAlert(isEditing ? `Category '${formData.name}' updated successfully.` : `New category '${formData.name}' created!`);
         setIsModalOpen(false);
         onRefreshCatalogs?.();
@@ -335,6 +336,7 @@ export default function CategoryManagementAdminModule({
         })
       ]);
 
+      invalidateCategoriesCache();
       triggerAlert(`Reordered categories.`);
       onRefreshCatalogs?.();
     } catch (err: any) {
@@ -381,6 +383,7 @@ export default function CategoryManagementAdminModule({
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
+        invalidateCategoriesCache();
         triggerAlert(resData.message || `Category '${cat.name}' deleted successfully.`);
         setDeleteModal({ isOpen: false, category: null, type: 'services', fallbackId: '', linkedCount: 0 });
         onRefreshCatalogs?.();

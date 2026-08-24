@@ -237,7 +237,13 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
     const fetchContent = async () => {
       try {
         // 1. Try Server API
-        const res = await fetch('/api/privacy-security');
+        const res = await fetch(`/api/privacy-security?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const json = await safeParseJsonResponse<any>(res);
           if (json && json.hero) {

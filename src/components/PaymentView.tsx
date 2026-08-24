@@ -49,7 +49,13 @@ export default function PaymentView({
     let isMounted = true;
     const fetchPaymentConfig = async () => {
       try {
-        const res = await fetch('/api/payment-settings');
+        const res = await fetch(`/api/payment-settings?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const data = await safeParseJsonResponse<any>(res);
           if (data && (data.upiId || data.bankName || data.accountNumber) && isMounted) {

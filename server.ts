@@ -75,6 +75,11 @@ app.use(express.json({ limit: '10mb' }));
 
 // Middleware to ensure Firestore hydration completes before serving ANY requests
 app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
   if (req.path !== '/api/health') {
     try {
       await ensureDatabaseReady();
@@ -7243,22 +7248,48 @@ app.delete('/api/admin/reviews/:id', async (req, res) => {
 });
 
 // Banners CRUD
+app.get('/api/banners', (req, res) => {
+  res.json(dbState.banners || []);
+});
+
 app.get('/api/admin/banners', (req, res) => {
-  res.json(dbState.banners);
+  res.json(dbState.banners || []);
 });
 
 app.post('/api/admin/banners', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const banner = req.body.banner || req.body;
   if (!banner || !banner.title || !banner.imageUrl) return res.status(400).json({ message: 'Title and imageUrl are required' });
+  
+  let imageUrl = banner.imageUrl;
+  let imageData = banner.imageData;
+
+  if (imageUrl && imageUrl.startsWith('data:')) {
+    try {
+      const timeStamp = Date.now();
+      const storedFileName = `banner_${timeStamp}.jpg`;
+      const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
+      const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(base64, 'base64');
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, buffer);
+      imageData = imageUrl;
+      imageUrl = `/uploads/media/${storedFileName}`;
+    } catch (e) {
+      console.error('Error saving banner image:', e);
+    }
+  }
+
   const newBanner = {
     id: `banner-${Date.now()}`,
     title: banner.title,
     type: banner.type || 'slider',
-    imageUrl: banner.imageUrl,
+    imageUrl,
+    imageData,
     linkUrl: banner.linkUrl || '',
     isActive: banner.isActive !== false
   };
+  if (!dbState.banners) dbState.banners = [];
   dbState.banners.push(newBanner);
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'BANNER_CREATE', `Created banner campaign: ${newBanner.title}`);
   await persistDatabase('banners', newBanner.id);
@@ -7268,9 +7299,35 @@ app.post('/api/admin/banners', async (req, res) => {
 app.put('/api/admin/banners/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
   const banner = req.body.banner || req.body;
+  if (!dbState.banners) dbState.banners = [];
   const idx = dbState.banners.findIndex(b => b.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Banner not found' });
-  dbState.banners[idx] = { ...dbState.banners[idx], ...banner };
+
+  let imageUrl = banner.imageUrl || dbState.banners[idx].imageUrl;
+  let imageData = banner.imageData || dbState.banners[idx].imageData;
+
+  if (imageUrl && imageUrl.startsWith('data:')) {
+    try {
+      const timeStamp = Date.now();
+      const storedFileName = `banner_${timeStamp}.jpg`;
+      const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
+      const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(base64, 'base64');
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, buffer);
+      imageData = imageUrl;
+      imageUrl = `/uploads/media/${storedFileName}`;
+    } catch (e) {
+      console.error('Error updating banner image:', e);
+    }
+  }
+
+  dbState.banners[idx] = { 
+    ...dbState.banners[idx], 
+    ...banner,
+    imageUrl,
+    imageData
+  };
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'BANNER_UPDATE', `Updated banner campaign: ${dbState.banners[idx].title}`);
   await persistDatabase('banners', req.params.id);
   res.json(dbState.banners[idx]);

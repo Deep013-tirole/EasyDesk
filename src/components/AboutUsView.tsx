@@ -150,7 +150,13 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
     let isMounted = true;
     const fetchAboutData = async () => {
       try {
-        const res = await fetch('/api/about');
+        const res = await fetch(`/api/about?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const data = await safeParseJsonResponse<any>(res);
           if (data && data.aboutUs && isMounted) {

@@ -71,7 +71,13 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
     let isMounted = true;
     const fetchContactInfo = async () => {
       try {
-        const res = await fetch('/api/contact-settings');
+        const res = await fetch(`/api/contact-settings?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const data = await safeParseJsonResponse<any>(res);
           if (data && (data.phone || data.email || data.companyName) && isMounted) {
