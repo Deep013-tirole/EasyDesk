@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, setLogLevel } from 'firebase/firestore';
+import { getFirestore, doc, setLogLevel } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 import defaultFirebaseConfig from '../../firebase-applet-config.json';
@@ -8,36 +8,58 @@ try {
   setLogLevel('error');
 } catch {}
 
+export interface FirebaseAppletConfig {
+  projectId: string;
+  appId?: string;
+  apiKey: string;
+  authDomain?: string;
+  firestoreDatabaseId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  [key: string]: any;
+}
+
+export function getFirebaseConfig(): FirebaseAppletConfig {
+  let config: any = defaultFirebaseConfig;
+  if (!config || !config.apiKey || !config.projectId) {
+    try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+    } catch {}
+  }
+  return {
+    projectId: config?.projectId || 'khaki-fact-snzsc',
+    apiKey: config?.apiKey || '',
+    authDomain: config?.authDomain || '',
+    firestoreDatabaseId: config?.firestoreDatabaseId || '(default)',
+    storageBucket: config?.storageBucket || '',
+    messagingSenderId: config?.messagingSenderId || '',
+    appId: config?.appId || ''
+  };
+}
+
+export function getFirestoreRestBaseUrl(): string {
+  const config = getFirebaseConfig();
+  const dbId = config.firestoreDatabaseId || '(default)';
+  return `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${dbId}/documents`;
+}
+
 let firestoreInstance: ReturnType<typeof getFirestore> | null = null;
 
 export function getFirestoreDb() {
   if (firestoreInstance) return firestoreInstance;
   try {
-    let config: any = defaultFirebaseConfig;
-    if (!config || !config.apiKey) {
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      }
-    }
+    const config = getFirebaseConfig();
     if (config && config.apiKey) {
-      const firebaseConfig = {
-        apiKey: config.apiKey,
-        authDomain: config.authDomain,
-        projectId: config.projectId,
-        storageBucket: config.storageBucket,
-        messagingSenderId: config.messagingSenderId,
-        appId: config.appId,
-      };
-      const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+      const app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
       const databaseId = config.firestoreDatabaseId || '(default)';
       firestoreInstance = getFirestore(app, databaseId);
-
-      console.log(`[FIREBASE] Initialized Firestore with database ID: ${databaseId}`);
       return firestoreInstance;
     }
   } catch (err) {
-    console.error('[FIREBASE] Error initializing Firestore:', err);
+    console.error('[FIREBASE] Error initializing Firestore SDK:', err);
   }
   return null;
 }
@@ -71,6 +93,9 @@ export const ENTITY_COLLECTIONS = [
   'masterData',
   'coupons',
   'contactMessages',
+  'scamReports',
+  'dataDeletionRequests',
+  'team',
 ] as const;
 
 // Settings document keys stored inside the 'settings' Firestore collection
@@ -122,54 +147,166 @@ export function sanitizePaymentConfig(raw: any): Record<string, any> {
 }
 
 /**
- * Saves a single document to its entity collection in Firestore.
+ * Decodes Firestore REST API typed values to standard JavaScript objects
+ */
+export function decodeFirestoreValue(val: any): any {
+  if (!val || typeof val !== 'object') return null;
+  if ('stringValue' in val) return val.stringValue;
+  if ('booleanValue' in val) return val.booleanValue;
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('timestampValue' in val) return val.timestampValue;
+  if ('nullValue' in val) return null;
+  if ('arrayValue' in val) {
+    return (val.arrayValue.values || []).map(decodeFirestoreValue);
+  }
+  if ('mapValue' in val) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
+      obj[k] = decodeFirestoreValue(v);
+    }
+    return obj;
+  }
+  return null;
+}
+
+/**
+ * Decodes a Firestore document REST response into a standard JavaScript object
+ */
+export function decodeFirestoreDocument(doc: any): Record<string, any> {
+  if (!doc || !doc.fields) return {};
+  const data: Record<string, any> = {};
+  for (const [k, v] of Object.entries(doc.fields)) {
+    data[k] = decodeFirestoreValue(v);
+  }
+  return data;
+}
+
+/**
+ * Encodes a standard JavaScript value into Firestore REST API typed structure
+ */
+export function encodeFirestoreValue(val: any): any {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return { integerValue: String(val) };
+    return { doubleValue: val };
+  }
+  if (typeof val === 'string') return { stringValue: val };
+  if (Array.isArray(val)) {
+    return { arrayValue: { values: val.map(encodeFirestoreValue) } };
+  }
+  if (typeof val === 'object') {
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) {
+        fields[k] = encodeFirestoreValue(v);
+      }
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
+/**
+ * Encodes a JavaScript object into a Firestore document structure
+ */
+export function encodeFirestoreDocument(obj: Record<string, any>): { fields: Record<string, any> } {
+  const fields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) {
+      fields[k] = encodeFirestoreValue(v);
+    }
+  }
+  return { fields };
+}
+
+/**
+ * Saves a single document to its entity collection in Firestore via direct REST API with fetch.
  */
 export async function saveFirestoreDoc(collectionName: string, docId: string, data: any): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) return;
-  if (!docId) return;
+  if (!docId || !data) return;
+  const config = getFirebaseConfig();
+  if (!config.apiKey) return;
+
+  const baseUrl = getFirestoreRestBaseUrl();
+  const url = `${baseUrl}/${collectionName}/${encodeURIComponent(String(docId))}?key=${config.apiKey}`;
+  const cleanData = JSON.parse(JSON.stringify(data));
+  cleanData._updatedAt = Date.now();
 
   try {
-    const docRef = doc(db, collectionName, String(docId));
-    const cleanData = JSON.parse(JSON.stringify(data));
-    await withTimeout(setDoc(docRef, { ...cleanData, _updatedAt: Date.now() }), 10000, null);
-    console.log(`[FIREBASE] Saved doc to ${collectionName}/${docId}`);
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(encodeFirestoreDocument(cleanData))
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error(`[FIREBASE REST] Error saving ${collectionName}/${docId}: HTTP ${res.status} - ${errText}`);
+    } else {
+      console.log(`[FIREBASE REST] Saved doc to ${collectionName}/${docId}`);
+    }
   } catch (err) {
-    console.error(`[FIREBASE] Failed to save doc to ${collectionName}/${docId}:`, err);
+    console.error(`[FIREBASE REST] Network error saving doc to ${collectionName}/${docId}:`, err);
   }
 }
 
 /**
- * Deletes a single document from an entity collection in Firestore.
+ * Deletes a single document from an entity collection in Firestore via direct REST API with fetch.
  */
 export async function deleteFirestoreDoc(collectionName: string, docId: string): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) return;
   if (!docId) return;
+  const config = getFirebaseConfig();
+  if (!config.apiKey) return;
+
+  const baseUrl = getFirestoreRestBaseUrl();
+  const url = `${baseUrl}/${collectionName}/${encodeURIComponent(String(docId))}?key=${config.apiKey}`;
 
   try {
-    const docRef = doc(db, collectionName, String(docId));
-    await withTimeout(deleteDoc(docRef), 10000, null);
-    console.log(`[FIREBASE] Successfully deleted doc from ${collectionName}/${docId}`);
+    const res = await fetch(url, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok && res.status !== 404) {
+      const errText = await res.text().catch(() => '');
+      console.error(`[FIREBASE REST] Error deleting ${collectionName}/${docId}: HTTP ${res.status} - ${errText}`);
+    } else {
+      console.log(`[FIREBASE REST] Successfully deleted doc from ${collectionName}/${docId}`);
+    }
   } catch (err) {
-    console.error(`[FIREBASE] Failed to delete doc from ${collectionName}/${docId}:`, err);
+    console.error(`[FIREBASE REST] Network error deleting doc from ${collectionName}/${docId}:`, err);
   }
 }
 
 /**
- * Saves a settings object to the 'settings' collection in Firestore.
+ * Saves a settings object to the 'settings' collection in Firestore via direct REST API with fetch.
  */
 export async function saveFirestoreSetting(settingKey: string, data: any): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) return;
+  if (!settingKey || !data) return;
+  const config = getFirebaseConfig();
+  if (!config.apiKey) return;
+
+  const baseUrl = getFirestoreRestBaseUrl();
+  const url = `${baseUrl}/settings/${encodeURIComponent(settingKey)}?key=${config.apiKey}`;
+  const cleanData = JSON.parse(JSON.stringify(data));
+  cleanData._updatedAt = Date.now();
 
   try {
-    const docRef = doc(db, 'settings', settingKey);
-    const cleanData = JSON.parse(JSON.stringify(data));
-    await withTimeout(setDoc(docRef, { ...cleanData, _updatedAt: Date.now() }), 10000, null);
-    console.log(`[FIREBASE] Saved setting to settings/${settingKey}`);
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(encodeFirestoreDocument(cleanData))
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error(`[FIREBASE REST] Error saving setting ${settingKey}: HTTP ${res.status} - ${errText}`);
+    } else {
+      console.log(`[FIREBASE REST] Saved setting to settings/${settingKey}`);
+    }
   } catch (err) {
-    console.error(`[FIREBASE] Failed to save setting ${settingKey}:`, err);
+    console.error(`[FIREBASE REST] Network error saving setting ${settingKey}:`, err);
   }
 }
 
@@ -177,17 +314,14 @@ export async function saveFirestoreSetting(settingKey: string, data: any): Promi
  * Seeds all dbState collections and settings to document-per-entity structure in Firestore.
  */
 export async function seedFirestoreFromInitialState(dbState: Record<string, any>): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) return;
-
-  console.log('[FIREBASE] Writing document-per-entity structure to Firestore...');
+  console.log('[FIREBASE REST] Writing document-per-entity structure to Firestore...');
   const promises: Promise<void>[] = [];
 
   // Write system initialization sentinel FIRST
   promises.push(saveFirestoreSetting('system_init', {
     isInitialized: true,
     initializedAt: new Date().toISOString(),
-    version: '2.0.0'
+    version: '2.1.0'
   }));
 
   // Seed entity collections
@@ -214,7 +348,7 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
 
   // Seed settings
   for (const settingKey of SETTING_KEYS) {
-    if (settingKey === 'system_init') continue; // Handled above
+    if (settingKey === 'system_init') continue;
     if (settingKey === 'privacySecurity' || settingKey === 'privacySecuritySettings') {
       const privData = dbState.privacySecuritySettings || dbState.privacySecurity;
       if (privData !== undefined) {
@@ -231,14 +365,7 @@ export async function seedFirestoreFromInitialState(dbState: Record<string, any>
   }
 
   await Promise.allSettled(promises);
-  console.log('[FIREBASE] Document-per-entity write completed successfully.');
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallbackValue), ms)),
-  ]);
+  console.log('[FIREBASE REST] Document-per-entity seed completed.');
 }
 
 export interface FirestoreLoadResult {
@@ -248,80 +375,100 @@ export interface FirestoreLoadResult {
 }
 
 /**
- * Loads entire state from Firestore document-per-entity structure in parallel.
- * Returns null if Firestore is completely offline or unreachable.
+ * Loads entire state from Firestore document-per-entity structure via direct parallel REST queries.
  */
 export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | null> {
-  const db = getFirestoreDb();
-  if (!db) {
-    console.warn('[FIREBASE] Firestore unavailable');
+  const config = getFirebaseConfig();
+  if (!config.apiKey || !config.projectId) {
+    console.warn('[FIREBASE REST] Missing Firebase API Key or Project ID in configuration');
     return null;
   }
+
+  const baseUrl = getFirestoreRestBaseUrl();
+  const queryUrl = `${baseUrl}:runQuery?key=${config.apiKey}`;
 
   try {
     const stateFromDb: Record<string, any> = {};
     let totalDocsLoaded = 0;
 
-    // 1. Check system_init sentinel
-    let systemInitDoc: any = null;
-    try {
-      const initDocSnap = await withTimeout(getDoc(doc(db, 'settings', 'system_init')), 8000, null);
-      if (initDocSnap && initDocSnap.exists()) {
-        systemInitDoc = initDocSnap.data();
-      }
-    } catch (e) {
-      console.warn('[FIREBASE] Error querying settings/system_init:', e);
-    }
-
-    // 2. Load all entity collections in parallel with 8s timeout
-    const entityPromises = ENTITY_COLLECTIONS.map(async (collName) => {
-      try {
-        const queryPromise = getDocs(collection(db, collName));
-        const querySnapshot = await withTimeout(queryPromise, 8000, null);
-        if (querySnapshot) {
-          const items: any[] = [];
-          querySnapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            delete data._updatedAt;
-            items.push(data);
-          });
-          return { collName, items, exists: !querySnapshot.empty, success: true };
-        }
-      } catch (e) {
-        console.error(`[FIREBASE] Error querying collection ${collName}:`, e);
-      }
-      return { collName, items: [], exists: false, success: false };
-    });
-
+    // 1. Query settings collection
     const settingsPromise = (async () => {
       try {
-        const queryPromise = getDocs(collection(db, 'settings'));
-        const settingsSnapshot = await withTimeout(queryPromise, 8000, null);
-        if (settingsSnapshot && !settingsSnapshot.empty) {
-          const settingsMap: Record<string, any> = {};
-          settingsSnapshot.forEach((docSnap) => {
-            const key = docSnap.id;
-            const data = docSnap.data();
-            delete data._updatedAt;
-            settingsMap[key] = data;
-          });
-          return { settingsMap, success: true };
+        const res = await fetch(queryUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: 'settings' }]
+            }
+          })
+        });
+        if (!res.ok) {
+          console.warn(`[FIREBASE REST] settings runQuery returned HTTP ${res.status}`);
+          return { settingsMap: {}, success: false };
         }
-        return { settingsMap: {}, success: !!settingsSnapshot };
+        const data = await res.json();
+        const settingsMap: Record<string, any> = {};
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            if (item.document && item.document.name) {
+              const docId = item.document.name.split('/').pop() || '';
+              const docData = decodeFirestoreDocument(item.document);
+              delete docData._updatedAt;
+              settingsMap[docId] = docData;
+            }
+          }
+        }
+        return { settingsMap, success: true };
       } catch (e) {
-        console.error('[FIREBASE] Error querying settings collection:', e);
+        console.error('[FIREBASE REST] Error querying settings:', e);
         return { settingsMap: {}, success: false };
       }
     })();
 
-    const [entityResults, settingsRes] = await Promise.all([
-      Promise.all(entityPromises),
+    // 2. Query all entity collections in parallel
+    const entityPromises = ENTITY_COLLECTIONS.map(async (collName) => {
+      try {
+        const res = await fetch(queryUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: collName }]
+            }
+          })
+        });
+        if (!res.ok) {
+          console.warn(`[FIREBASE REST] ${collName} runQuery returned HTTP ${res.status}`);
+          return { collName, items: [], exists: false, success: false };
+        }
+        const data = await res.json();
+        const items: any[] = [];
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            if (item.document && item.document.name) {
+              const docData = decodeFirestoreDocument(item.document);
+              delete docData._updatedAt;
+              items.push(docData);
+            }
+          }
+        }
+        return { collName, items, exists: items.length > 0, success: true };
+      } catch (e) {
+        console.error(`[FIREBASE REST] Error querying collection ${collName}:`, e);
+        return { collName, items: [], exists: false, success: false };
+      }
+    });
+
+    const [settingsRes, entityResults] = await Promise.all([
       settingsPromise,
+      Promise.all(entityPromises)
     ]);
 
+    // Process entity results
     for (const { collName, items, exists, success } of entityResults) {
       if (!success) {
-        console.warn(`[FIREBASE] Skipping collection ${collName} due to fetch error/timeout to prevent data loss.`);
+        console.warn(`[FIREBASE REST] Skipping collection ${collName} due to fetch error to preserve memory state.`);
         continue;
       }
       if (collName === 'masterData') {
@@ -339,7 +486,6 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
         }
         stateFromDb[collName] = map;
       } else {
-        // Authoritative entity collection assignment
         stateFromDb[collName] = items;
       }
       if (exists) {
@@ -347,6 +493,7 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       }
     }
 
+    // Process settings results
     const settingsResult = settingsRes.settingsMap || {};
     const settingsCount = Object.keys(settingsResult).length;
     for (const [key, val] of Object.entries(settingsResult)) {
@@ -371,56 +518,37 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       if (key === 'founder') {
         stateFromDb['founder'] = val;
       }
+      if (key === 'companyProfile') {
+        stateFromDb['companyProfile'] = val;
+      }
     }
 
-    // Determine if database has ever been initialized
+    const systemInitDoc = settingsResult['system_init'];
     const isAlreadyInitialized = !!systemInitDoc || totalDocsLoaded > 0 || settingsCount > 0;
 
     if (!isAlreadyInitialized) {
-      // Check legacy 'app_state' doc migration only if brand new
-      console.log('[FIREBASE] No system_init sentinel found. Checking legacy app_state doc...');
-      const legacyPromise = getDocs(collection(db, 'app_state'));
-      const legacySnapshot = await withTimeout(legacyPromise, 8000, null);
-      if (legacySnapshot && !legacySnapshot.empty) {
-        const legacyState: Record<string, any> = {};
-        legacySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data && 'data' in data) {
-            legacyState[docSnap.id] = data.data;
-          }
-        });
-
-        if (Object.keys(legacyState).length > 0) {
-          console.log('[FIREBASE] Migrating legacy app_state to document-per-entity structure...');
-          await seedFirestoreFromInitialState(legacyState);
-          return { state: legacyState, isFreshDatabase: false, totalDocsLoaded: Object.keys(legacyState).length };
-        }
-      }
-      // Genuinely fresh, empty database
+      console.log('[FIREBASE REST] Fresh database detected. Ready for initial seeding.');
       return { state: {}, isFreshDatabase: true, totalDocsLoaded: 0 };
     }
 
-    console.log(`[FIREBASE] Successfully loaded ${totalDocsLoaded} entity docs and ${settingsCount} settings from Cloud Firestore.`);
+    console.log(`[FIREBASE REST] Successfully loaded ${totalDocsLoaded} entity docs and ${settingsCount} settings from Cloud Firestore.`);
     return { state: stateFromDb, isFreshDatabase: false, totalDocsLoaded };
   } catch (err) {
-    console.error('[FIREBASE] Failed to load state from Firestore:', err);
+    console.error('[FIREBASE REST] Failed to load state from Firestore:', err);
     return null;
   }
 }
 
 /**
- * Persists changes to Firestore for a specific entity or setting key.
+ * Persists changes to Firestore for a specific entity or setting key via direct REST calls.
  */
 export async function persistFirestoreChange(
   dbState: Record<string, any>,
   collectionOrKey?: string,
   id?: string
 ): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) return;
-
   if (!collectionOrKey) {
-    // Comprehensive safe flush of all active settings and entity collections
+    // Flush all active settings
     const promises: Promise<any>[] = [];
     for (const key of SETTING_KEYS) {
       if (dbState[key] !== undefined && key !== 'system_init') {
@@ -523,25 +651,9 @@ export async function persistFirestoreChange(
         }
       }
     } else {
-      // Collection-wide sync: prune deleted documents from Firestore
+      // Collection-wide sync
       const list = dbState[collectionOrKey];
       if (Array.isArray(list)) {
-        try {
-          const snapshot = await getDocs(collection(db, collectionOrKey));
-          const currentMemoryIds = new Set(list.map((x: any) => String(x.id)));
-          const deletePromises: Promise<void>[] = [];
-          snapshot.forEach((d) => {
-            if (!currentMemoryIds.has(d.id)) {
-              deletePromises.push(deleteFirestoreDoc(collectionOrKey, d.id));
-            }
-          });
-          if (deletePromises.length > 0) {
-            await Promise.allSettled(deletePromises);
-          }
-        } catch (e) {
-          console.warn(`[FIREBASE] Prune check failed for ${collectionOrKey}:`, e);
-        }
-
         const savePromises = list.map((item: any) => {
           if (item && item.id) {
             return saveFirestoreDoc(collectionOrKey, String(item.id), item);

@@ -143,6 +143,11 @@ async function handleExpressRequest(expressApp: any, webReq: Request): Promise<R
       return this;
     };
 
+    if (bodyBuffer.length > 0) {
+      req.push(bodyBuffer);
+    }
+    req.push(null);
+
     expressApp(req, res, (err: any) => {
       if (err) {
         console.error('Express handler error:', err);
@@ -157,11 +162,6 @@ async function handleExpressRequest(expressApp: any, webReq: Request): Promise<R
         }));
       }
     });
-
-    if (bodyBuffer.length > 0) {
-      req.push(bodyBuffer);
-    }
-    req.push(null);
   });
 }
 

@@ -5359,13 +5359,20 @@ app.delete('/api/admin/employees/:id', authenticateToken, requirePermission('emp
       dbState.employeeDocuments = dbState.employeeDocuments.filter(d => d.employeeId !== canonicalId);
     }
     logAudit(req, 'EMPLOYEE_PERMANENTLY_DELETED', `Permanently deleted employee ${emp.fullName} (${emp.employeeCode})`, canonicalId);
+    await Promise.allSettled([
+      persistDatabase('employees', canonicalId),
+      persistDatabase('employeeKYC', canonicalId),
+      persistDatabase('employeePayroll', canonicalId),
+      persistDatabase('employeeAccounts', canonicalId),
+      persistDatabase('employeeDocuments')
+    ]);
   } else {
     emp.employmentStatus = 'Terminated';
     emp.updatedAt = new Date().toISOString();
     logAudit(req, 'EMPLOYEE_DEACTIVATED', `Deactivated employee ${emp.fullName} (${emp.employeeCode})`, canonicalId);
+    await persistDatabase('employees', canonicalId);
   }
 
-  await persistDatabase('employees', canonicalId);
   res.json({ message: isHardDelete ? 'Employee record permanently deleted.' : 'Employee profile marked as Terminated/Deactivated.', employee: emp });
 });
 
@@ -5954,7 +5961,7 @@ app.post('/api/security/report-scam', async (req, res) => {
   };
   if (!dbState.scamReports) dbState.scamReports = [];
   dbState.scamReports.unshift(report);
-  await persistDatabase('auditLogs', report.id);
+  await persistDatabase('scamReports', report.id);
   res.status(201).json({ message: 'Scam incident report submitted successfully to EasyDesk Security Team.', report });
 });
 
@@ -5975,7 +5982,7 @@ app.post('/api/security/request-data-deletion', async (req, res) => {
   };
   if (!dbState.dataDeletionRequests) dbState.dataDeletionRequests = [];
   dbState.dataDeletionRequests.unshift(deletionReq);
-  await persistDatabase('auditLogs', deletionReq.id);
+  await persistDatabase('dataDeletionRequests', deletionReq.id);
   res.status(201).json({ message: 'Data deletion request recorded. Our Security Officer will process your purge within 24-48 business hours.', request: deletionReq });
 });
 
@@ -5992,7 +5999,7 @@ app.patch('/api/admin/scam-reports/:id', authenticateToken, requireRole([UserRol
   const report = (dbState.scamReports || []).find((r: any) => r.id === req.params.id);
   if (!report) return res.status(404).json({ message: 'Report not found' });
   report.status = status || report.status;
-  await persistDatabase('auditLogs', report.id);
+  await persistDatabase('scamReports', report.id);
   res.json(report);
 });
 
@@ -6001,7 +6008,7 @@ app.patch('/api/admin/data-deletion-requests/:id', authenticateToken, requireRol
   const reqObj = (dbState.dataDeletionRequests || []).find((d: any) => d.id === req.params.id);
   if (!reqObj) return res.status(404).json({ message: 'Request not found' });
   reqObj.status = status || reqObj.status;
-  await persistDatabase('auditLogs', reqObj.id);
+  await persistDatabase('dataDeletionRequests', reqObj.id);
   res.json(reqObj);
 });
 
