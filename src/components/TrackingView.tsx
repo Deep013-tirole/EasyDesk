@@ -5,8 +5,9 @@ import {
   Star, MessageSquare, Sparkles, ShieldCheck
 } from 'lucide-react';
 import { Order, OrderStatus } from '../types.js';
-import { apiFetch } from '../lib/apiClient.js';
+import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
 import { printElement } from '../lib/printUtils.js';
+import ContentUnavailable from './ContentUnavailable.js';
 
 export default function TrackingView() {
   const [orderId, setOrderId] = useState('');
@@ -41,15 +42,22 @@ export default function TrackingView() {
     try {
       const url = `/api/orders/track?orderId=${encodeURIComponent(orderId.trim())}${mobile ? `&mobile=${encodeURIComponent(mobile.trim())}` : ''}`;
       const response = await fetch(url);
-      const data = await response.json();
       
       if (response.ok) {
-        setOrder(data);
+        const data = await safeParseJsonResponse<Order>(response);
+        if (data) {
+          setOrder(data);
+        } else {
+          setError('Invalid tracking record received. Please check with customer support.');
+        }
+      } else if (response.status === 404) {
+        setError('404: No active order found with this identifier. Please verify your Order ID (e.g., ORD-10024) or contact our desk.');
       } else {
-        setError(data.message || 'No active order found. Double check your Order ID (e.g. ORD-10024).');
+        const data = await safeParseJsonResponse<any>(response);
+        setError(data?.message || 'Unable to retrieve order status at this time. Please try again.');
       }
     } catch (err) {
-      setError('Network connection failure. Please try again.');
+      setError('Network connection error. Please verify your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -240,10 +248,27 @@ export default function TrackingView() {
         </form>
 
         {error && (
-          <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-2xl flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
+          error.includes('404') ? (
+            <div className="mt-5">
+              <ContentUnavailable
+                compact
+                id="tracking-not-found-state"
+                statusCode={404}
+                title="Order Record Unavailable"
+                message={error.replace(/^404:\s*/, '')}
+                retryText="Try Another ID"
+                onRetry={() => {
+                  setError('');
+                  setOrderId('');
+                }}
+              />
+            </div>
+          ) : (
+            <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-2xl flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )
         )}
       </div>
 

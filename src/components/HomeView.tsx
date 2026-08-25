@@ -13,6 +13,7 @@ import { openWhatsAppForService, openGeneralWhatsApp, onContactSettingsUpdated }
 import { BaseCard, BaseCardBody, BaseCardFooter } from './BaseCard.js';
 import ReviewSubmissionModal from './ReviewSubmissionModal.js';
 import BlogCard from './blog/BlogCard.js';
+import { getClientFaqs } from '../lib/firestoreClientService.js';
 
 const STATS = [
   { label: 'Applications Handled', value: '45,280+', desc: 'Across 100+ digital certificate categories' },
@@ -106,27 +107,49 @@ export default function HomeView({
       .then(data => applyContact(data))
       .catch(() => {});
 
-    // Fetch dynamic FAQs
-    fetch(`/api/faqs?_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((f: any) => ({
-            question: f.question || f.q || '',
-            answer: f.answer || f.a || ''
-          })).filter(f => f.question && f.answer);
-          if (mapped.length > 0) {
-            setFaqsList(mapped);
+    // Fetch dynamic FAQs with multi-tier fallback
+    const loadFaqs = async () => {
+      try {
+        const res = await fetch(`/api/faqs?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped = data.map((f: any) => ({
+              question: f.question || f.q || '',
+              answer: f.answer || f.a || ''
+            })).filter(f => f.question && f.answer);
+            if (mapped.length > 0) {
+              setFaqsList(mapped);
+              return;
+            }
           }
         }
-      })
-      .catch(() => {});
+      } catch {}
+
+      // Firestore fallback
+      try {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const directFaqs = await getClientFaqs();
+          if (directFaqs && directFaqs.length > 0) {
+            const mapped = directFaqs.map((f: any) => ({
+              question: f.question || f.q || '',
+              answer: f.answer || f.a || ''
+            })).filter(f => f.question && f.answer);
+            if (mapped.length > 0) {
+              setFaqsList(mapped);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    loadFaqs();
 
     const unsubscribe = onContactSettingsUpdated(applyContact);
     return () => unsubscribe();

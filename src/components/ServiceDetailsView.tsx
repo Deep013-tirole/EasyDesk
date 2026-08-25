@@ -8,6 +8,7 @@ import {
 import { Service, ServiceCategory, Review } from '../types.js';
 import { openWhatsAppForService, openGeneralWhatsApp } from '../lib/whatsapp.js';
 import ReviewSubmissionModal from './ReviewSubmissionModal.js';
+import ContentUnavailable from './ContentUnavailable.js';
 
 interface ServiceDetailsViewProps {
   serviceId: string;
@@ -110,27 +111,25 @@ export default function ServiceDetailsView({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Fallback if service not found
+  // Fallback if service not found (404 / content unavailable)
   if (!service) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center font-sans">
-        <div className="w-16 h-16 bg-blue-50 text-[#0F4C81] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
-          <AlertCircle className="w-8 h-8" />
-        </div>
-        <h2 className="text-2xl font-black text-slate-900">Service Not Found</h2>
-        <p className="text-xs text-slate-500 mt-2 max-w-md mx-auto">
-          The requested service catalog item may have been updated or moved. Please explore our full directory.
-        </p>
-        <button
-          onClick={() => {
-            setSelectedServiceId(null);
-            setView('services');
-          }}
-          className="mt-6 inline-flex items-center gap-2 bg-[#0F4C81] hover:bg-[#0b3b64] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Services Catalog
-        </button>
-      </div>
+      <ContentUnavailable
+        id="service-details-not-found"
+        statusCode={404}
+        title="Service Unavailable"
+        message="The requested service catalog item may have been updated, archived, or moved. Please explore our full directory of government services."
+        primaryActionText="Browse All Services"
+        onPrimaryAction={() => {
+          setSelectedServiceId(null);
+          setView('services');
+        }}
+        secondaryActionText="Return to Home"
+        onSecondaryAction={() => {
+          setSelectedServiceId(null);
+          setView('home');
+        }}
+      />
     );
   }
 

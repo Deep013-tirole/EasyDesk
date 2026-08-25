@@ -8,6 +8,7 @@ import {
 import { Blog, BlogCategory, BlogComment } from '../../types.js';
 import { openGeneralWhatsApp } from '../../lib/whatsapp.js';
 import BlogCard from './BlogCard.js';
+import ContentUnavailable from '../ContentUnavailable.js';
 
 interface BlogDetailViewProps {
   blog: Blog;
@@ -28,6 +29,19 @@ export default function BlogDetailView({
   onSelectBlog,
   updateBlogs
 }: BlogDetailViewProps) {
+  if (!blog) {
+    return (
+      <ContentUnavailable
+        id="blog-detail-not-found"
+        statusCode={404}
+        title="Article Unavailable"
+        message="The requested filing guide or article could not be found or may have been updated."
+        primaryActionText="Back to All Guides"
+        onPrimaryAction={onBack}
+      />
+    );
+  }
+
   const [imageError, setImageError] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 

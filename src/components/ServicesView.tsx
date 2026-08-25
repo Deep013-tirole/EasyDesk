@@ -10,6 +10,7 @@ import { Service, ServiceCategory } from '../types.js';
 import { openWhatsAppForService, openGeneralWhatsApp } from '../lib/whatsapp.js';
 import { BaseCard, BaseCardBody, BaseCardFooter } from './BaseCard.js';
 import { useScrollToTopOnChange } from '../lib/scrollUtils.js';
+import ContentUnavailable from './ContentUnavailable.js';
 
 interface ServicesViewProps {
   categories: ServiceCategory[];
@@ -161,7 +162,18 @@ export default function ServicesView({
         </div>
 
         {/* 3. SERVICES GRID */}
-        {filteredServices.length === 0 ? (
+        {services.length === 0 && !searchQuery ? (
+          <ContentUnavailable
+            id="services-catalog-unavailable"
+            statusCode={404}
+            title="Services Directory Unavailable"
+            message="We were unable to load the services catalog at this moment. You can still reach our team directly on WhatsApp for filing assistance."
+            primaryActionText="Return to Home"
+            onPrimaryAction={() => setView('home')}
+            secondaryActionText="Chat on WhatsApp"
+            onSecondaryAction={() => openGeneralWhatsApp('Hello EasyDesk, I need help with government certificate services.')}
+          />
+        ) : filteredServices.length === 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-10 text-center shadow-sm space-y-4">
             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0F4C81] border border-blue-100 flex items-center justify-center mx-auto shadow-2xs">
               <ShieldAlert className="w-7 h-7" />

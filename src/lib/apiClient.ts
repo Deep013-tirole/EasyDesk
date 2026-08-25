@@ -127,11 +127,36 @@ export async function adminFetch(endpoint: string, options: RequestOptions = {})
   return apiFetch(endpoint, { ...options, isAdmin: true });
 }
 
+export class ApiError extends Error {
+  status: number;
+  isNotFound: boolean;
+  isOffline: boolean;
+  endpoint: string;
+
+  constructor(message: string, status: number, endpoint: string, isOffline = false) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.isNotFound = status === 404;
+    this.isOffline = isOffline;
+    this.endpoint = endpoint;
+  }
+}
+
+export function isNotFoundError(err: any): boolean {
+  if (!err) return false;
+  return err.status === 404 || err.isNotFound === true || err?.message?.includes('404') || err?.message?.toLowerCase().includes('not found');
+}
+
 export async function apiClient<T = any>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const response = await apiFetch(endpoint, options);
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    if (response.status === 404) {
+      errorMessage = 'Content Unavailable: The requested resource was not found.';
+    }
+
     try {
       const cloned = response.clone();
       const errorData = await safeParseJsonResponse<any>(cloned);
@@ -141,7 +166,8 @@ export async function apiClient<T = any>(endpoint: string, options: RequestOptio
     } catch {
       // Ignore JSON parse error on non-json error response
     }
-    throw new Error(errorMessage);
+    
+    throw new ApiError(errorMessage, response.status, endpoint, response.status === 503);
   }
 
   // Handle empty or 204 response
@@ -155,4 +181,5 @@ export async function apiClient<T = any>(endpoint: string, options: RequestOptio
   }
   return parsed;
 }
+
 

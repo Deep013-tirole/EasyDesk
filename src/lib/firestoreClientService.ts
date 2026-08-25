@@ -145,6 +145,29 @@ export async function getClientReviews(): Promise<Review[]> {
 }
 
 /**
+ * Loads all FAQs directly from Firestore
+ */
+export async function getClientFaqs(): Promise<any[]> {
+  if (isNetworkOffline()) return [];
+  try {
+    const q = collection(db, 'faqs');
+    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    if (!snapshot || snapshot.empty) return [];
+
+    const list: any[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data();
+      delete data._updatedAt;
+      list.push({ ...data, id: data.id || d.id });
+    });
+    return list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  } catch (err) {
+    handleFirestoreError('Error fetching faqs', err);
+    return [];
+  }
+}
+
+/**
  * Loads a specific setting document directly from Firestore
  */
 export async function getClientSetting<T = any>(settingKey: string): Promise<T | null> {

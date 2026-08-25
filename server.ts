@@ -7044,9 +7044,19 @@ app.delete('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN'
   res.json({ message: 'Blog deleted' });
 });
 
-// FAQ CRUD
+// FAQ CRUD & Public Endpoint
+app.get(['/api/faqs', '/api/faq'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json(dbState.faqs || []);
+});
+
 app.get('/api/admin/faqs', (req, res) => {
-  res.json(dbState.faqs);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json(dbState.faqs || []);
 });
 
 app.post('/api/admin/faqs', async (req, res) => {

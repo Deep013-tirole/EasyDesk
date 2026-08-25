@@ -13,7 +13,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { Service, Review } from '../types.js';
-import { apiFetch } from '../lib/apiClient.js';
+import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
+import { getClientServices } from '../lib/firestoreClientService.js';
 
 interface ReviewSubmissionFormProps {
   initialCustomerId?: string;
@@ -51,24 +52,40 @@ export default function ReviewSubmissionForm({
 
   // Fetch available services for the dropdown
   useEffect(() => {
+    let isMounted = true;
     async function loadServices() {
       setLoadingServices(true);
       try {
-        const res = await fetch('/api/services');
+        const res = await fetch(`/api/services?_t=${Date.now()}`);
         if (res.ok) {
-          const data = await res.json();
-          setServices(Array.isArray(data) ? data : []);
-          if (!serviceId && data.length > 0 && !initialServiceId) {
-            setServiceId(data[0].id);
+          const data = await safeParseJsonResponse<any[]>(res);
+          if (Array.isArray(data) && data.length > 0 && isMounted) {
+            setServices(data);
+            if (!serviceId && !initialServiceId) {
+              setServiceId(data[0].id);
+            }
+            return;
           }
         }
-      } catch (err) {
-        console.error('Failed to load services list', err);
-      } finally {
-        setLoadingServices(false);
+      } catch {}
+
+      // Direct Firestore fallback on 404 or network failure
+      try {
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          const fsServices = await getClientServices();
+          if (Array.isArray(fsServices) && fsServices.length > 0 && isMounted) {
+            setServices(fsServices);
+            if (!serviceId && !initialServiceId) {
+              setServiceId(fsServices[0].id);
+            }
+          }
+        }
+      } catch {} finally {
+        if (isMounted) setLoadingServices(false);
       }
     }
     loadServices();
+    return () => { isMounted = false; };
   }, []);
 
   // Update fields if initial props change

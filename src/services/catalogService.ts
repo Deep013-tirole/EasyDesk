@@ -124,6 +124,11 @@ export async function fetchWithCache<T>(
         setCachedCatalog(cacheKey, data);
         return { data, isCached: false };
       }
+    } else if (res.status === 404) {
+      // Gracefully handle 404: Endpoint not found or resource missing, fallback to Firestore/cache
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+        console.info(`[CatalogService] Endpoint ${endpoint} returned 404. Falling back to direct database and cached state.`);
+      }
     }
   } catch (err: any) {
     const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;

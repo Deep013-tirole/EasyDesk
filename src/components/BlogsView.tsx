@@ -13,6 +13,7 @@ import BlogCard from './blog/BlogCard.js';
 import FeaturedBlogCard from './blog/FeaturedBlogCard.js';
 import BlogDetailView from './blog/BlogDetailView.js';
 import BlogSidebar from './blog/BlogSidebar.js';
+import ContentUnavailable from './ContentUnavailable.js';
 
 interface BlogsViewProps {
   blogs: Blog[];
@@ -360,7 +361,16 @@ export default function BlogsView({ blogs, blogCategories = [], updateBlogs }: B
           
           {/* LEFT/CENTER: Article Cards Grid (8 of 12 cols on desktop) */}
           <div className="lg:col-span-8 space-y-6">
-            {filteredAndSortedBlogs.length === 0 ? (
+            {publicBlogs.length === 0 && !searchQuery ? (
+              <ContentUnavailable
+                id="blogs-unavailable-state"
+                statusCode={404}
+                title="Knowledge Hub Articles Unavailable"
+                message="Filing guides and articles are currently being synchronized or updated. Please check back shortly or connect with our desk on WhatsApp."
+                primaryActionText="Reset Category Filter"
+                onPrimaryAction={() => setSelectedCategory('all')}
+              />
+            ) : filteredAndSortedBlogs.length === 0 ? (
               /* Professional Empty State */
               <div className="bg-white border border-slate-200/90 rounded-3xl p-12 text-center shadow-xs space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0F4C81] border border-blue-100 flex items-center justify-center mx-auto shadow-2xs">
