@@ -9,6 +9,15 @@
   "alias": {
     "iconv-lite": "./src/shims/iconv-lite.cjs"
   },
+  "vars": {
+    "NODE_ENV": "production",
+    "FIREBASE_PROJECT_ID": "khaki-fact-snzsc",
+    "FIRESTORE_DATABASE_ID": "ai-studio-easydesk-86b0eb93-35f8-405c-a919-7be0008ea942",
+    "FIREBASE_API_KEY": "AIzaSyBAizmQai3ZxSD2eju4cuM6Tmink8V77Xc",
+    "FIREBASE_AUTH_DOMAIN": "khaki-fact-snzsc.firebaseapp.com",
+    "FIREBASE_APP_ID": "1:499604770609:web:1080cb6cfee39da28f2a10",
+    "FIREBASE_STORAGE_BUCKET": "khaki-fact-snzsc.firebasestorage.app"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

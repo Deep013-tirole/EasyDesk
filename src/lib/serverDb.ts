@@ -30,13 +30,13 @@ export function getFirebaseConfig(): FirebaseAppletConfig {
     } catch {}
   }
   return {
-    projectId: config?.projectId || 'khaki-fact-snzsc',
-    apiKey: config?.apiKey || '',
-    authDomain: config?.authDomain || '',
-    firestoreDatabaseId: config?.firestoreDatabaseId || '(default)',
-    storageBucket: config?.storageBucket || '',
-    messagingSenderId: config?.messagingSenderId || '',
-    appId: config?.appId || ''
+    projectId: (typeof process !== 'undefined' && process.env?.FIREBASE_PROJECT_ID) || config?.projectId || 'khaki-fact-snzsc',
+    apiKey: (typeof process !== 'undefined' && process.env?.FIREBASE_API_KEY) || config?.apiKey || 'AIzaSyBAizmQai3ZxSD2eju4cuM6Tmink8V77Xc',
+    authDomain: (typeof process !== 'undefined' && process.env?.FIREBASE_AUTH_DOMAIN) || config?.authDomain || 'khaki-fact-snzsc.firebaseapp.com',
+    firestoreDatabaseId: (typeof process !== 'undefined' && process.env?.FIRESTORE_DATABASE_ID) || config?.firestoreDatabaseId || 'ai-studio-easydesk-86b0eb93-35f8-405c-a919-7be0008ea942',
+    storageBucket: (typeof process !== 'undefined' && process.env?.FIREBASE_STORAGE_BUCKET) || config?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app',
+    messagingSenderId: (typeof process !== 'undefined' && process.env?.FIREBASE_MESSAGING_SENDER_ID) || config?.messagingSenderId || '499604770609',
+    appId: (typeof process !== 'undefined' && process.env?.FIREBASE_APP_ID) || config?.appId || '1:499604770609:web:1080cb6cfee39da28f2a10'
   };
 }
 
@@ -374,8 +374,32 @@ export interface FirestoreLoadResult {
   totalDocsLoaded: number;
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 1, timeoutMs = 8000): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (res.ok || res.status === 404) {
+        return res;
+      }
+      if (attempt === retries) return res;
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt === retries) throw err;
+    }
+    // Small backoff before retry
+    await new Promise(r => setTimeout(r, 150));
+  }
+  throw new Error('fetchWithRetry failed');
+}
+
 /**
- * Loads entire state from Firestore document-per-entity structure via direct parallel REST queries.
+ * Loads entire state from Firestore document-per-entity structure via batched direct REST queries.
  */
 export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | null> {
   const config = getFirebaseConfig();
@@ -390,46 +414,12 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
   try {
     const stateFromDb: Record<string, any> = {};
     let totalDocsLoaded = 0;
+    let successfulQueryCount = 0;
 
     // 1. Query settings collection
-    const settingsPromise = (async () => {
+    const queryCollection = async (collName: string) => {
       try {
-        const res = await fetch(queryUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            structuredQuery: {
-              from: [{ collectionId: 'settings' }]
-            }
-          })
-        });
-        if (!res.ok) {
-          console.warn(`[FIREBASE REST] settings runQuery returned HTTP ${res.status}`);
-          return { settingsMap: {}, success: false };
-        }
-        const data = await res.json();
-        const settingsMap: Record<string, any> = {};
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.document && item.document.name) {
-              const docId = item.document.name.split('/').pop() || '';
-              const docData = decodeFirestoreDocument(item.document);
-              delete docData._updatedAt;
-              settingsMap[docId] = docData;
-            }
-          }
-        }
-        return { settingsMap, success: true };
-      } catch (e) {
-        console.error('[FIREBASE REST] Error querying settings:', e);
-        return { settingsMap: {}, success: false };
-      }
-    })();
-
-    // 2. Query all entity collections in parallel
-    const entityPromises = ENTITY_COLLECTIONS.map(async (collName) => {
-      try {
-        const res = await fetch(queryUrl, {
+        const res = await fetchWithRetry(queryUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -437,11 +427,13 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
               from: [{ collectionId: collName }]
             }
           })
-        });
+        }, 1, 8000);
+
         if (!res.ok) {
           console.warn(`[FIREBASE REST] ${collName} runQuery returned HTTP ${res.status}`);
           return { collName, items: [], exists: false, success: false };
         }
+
         const data = await res.json();
         const items: any[] = [];
         if (Array.isArray(data)) {
@@ -449,6 +441,10 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
             if (item.document && item.document.name) {
               const docData = decodeFirestoreDocument(item.document);
               delete docData._updatedAt;
+              const docId = item.document.name.split('/').pop() || '';
+              if (!docData.id && docId) {
+                docData.id = docId;
+              }
               items.push(docData);
             }
           }
@@ -458,16 +454,38 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
         console.error(`[FIREBASE REST] Error querying collection ${collName}:`, e);
         return { collName, items: [], exists: false, success: false };
       }
-    });
+    };
 
-    const [settingsRes, entityResults] = await Promise.all([
-      settingsPromise,
-      Promise.all(entityPromises)
-    ]);
+    // Query settings
+    let settingsResult: Record<string, any> = {};
+    try {
+      const settingsRes = await queryCollection('settings');
+      if (settingsRes.success) {
+        successfulQueryCount++;
+        for (const item of settingsRes.items) {
+          const docId = item.id;
+          if (docId) {
+            settingsResult[docId] = item;
+          }
+        }
+      }
+    } catch {}
+
+    // Query entity collections in controlled chunks of 5 to avoid socket/subrequest exhaustion in Cloudflare Workers
+    const chunkSize = 5;
+    const entityResults: { collName: string; items: any[]; exists: boolean; success: boolean }[] = [];
+    
+    for (let i = 0; i < ENTITY_COLLECTIONS.length; i += chunkSize) {
+      const chunk = ENTITY_COLLECTIONS.slice(i, i + chunkSize);
+      const chunkResults = await Promise.all(chunk.map(c => queryCollection(c)));
+      entityResults.push(...chunkResults);
+    }
 
     // Process entity results
     for (const { collName, items, exists, success } of entityResults) {
-      if (!success) {
+      if (success) {
+        successfulQueryCount++;
+      } else {
         console.warn(`[FIREBASE REST] Skipping collection ${collName} due to fetch error to preserve memory state.`);
         continue;
       }
@@ -487,7 +505,6 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
     }
 
     // Process settings results
-    const settingsResult = settingsRes.settingsMap || {};
     const settingsCount = Object.keys(settingsResult).length;
     for (const [key, val] of Object.entries(settingsResult)) {
       stateFromDb[key] = val;
@@ -517,6 +534,12 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       if (key === 'masterData') {
         stateFromDb['masterData'] = val;
       }
+    }
+
+    // If no queries succeeded at all, do not assume fresh database (network is down)
+    if (successfulQueryCount === 0) {
+      console.warn('[FIREBASE REST] All Firestore collection queries failed. Retaining current in-memory state.');
+      return null;
     }
 
     const systemInitDoc = settingsResult['system_init'];
