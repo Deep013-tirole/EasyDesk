@@ -416,18 +416,24 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
     let totalDocsLoaded = 0;
     let successfulQueryCount = 0;
 
-    // 1. Query settings collection
+    // 1. Query settings and entity collections in parallel with robust individual handling
     const queryCollection = async (collName: string) => {
       try {
+        const queryBody: Record<string, any> = {
+          structuredQuery: {
+            from: [{ collectionId: collName }]
+          }
+        };
+        // Cap audit logs on cold hydration to prevent transferring megabytes over edge
+        if (collName === 'auditLogs') {
+          queryBody.structuredQuery.limit = 100;
+        }
+
         const res = await fetchWithRetry(queryUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            structuredQuery: {
-              from: [{ collectionId: collName }]
-            }
-          })
-        }, 1, 8000);
+          body: JSON.stringify(queryBody)
+        }, 1, 6000);
 
         if (!res.ok) {
           console.warn(`[FIREBASE REST] ${collName} runQuery returned HTTP ${res.status}`);
@@ -456,29 +462,22 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       }
     };
 
-    // Query settings
+    // Run settings query and all entity collection queries concurrently in parallel
+    const [settingsRes, ...entityResults] = await Promise.all([
+      queryCollection('settings'),
+      ...ENTITY_COLLECTIONS.map(coll => queryCollection(coll))
+    ]);
+
+    // Process settings
     let settingsResult: Record<string, any> = {};
-    try {
-      const settingsRes = await queryCollection('settings');
-      if (settingsRes.success) {
-        successfulQueryCount++;
-        for (const item of settingsRes.items) {
-          const docId = item.id;
-          if (docId) {
-            settingsResult[docId] = item;
-          }
+    if (settingsRes.success) {
+      successfulQueryCount++;
+      for (const item of settingsRes.items) {
+        const docId = item.id;
+        if (docId) {
+          settingsResult[docId] = item;
         }
       }
-    } catch {}
-
-    // Query entity collections in controlled chunks of 5 to avoid socket/subrequest exhaustion in Cloudflare Workers
-    const chunkSize = 5;
-    const entityResults: { collName: string; items: any[]; exists: boolean; success: boolean }[] = [];
-    
-    for (let i = 0; i < ENTITY_COLLECTIONS.length; i += chunkSize) {
-      const chunk = ENTITY_COLLECTIONS.slice(i, i + chunkSize);
-      const chunkResults = await Promise.all(chunk.map(c => queryCollection(c)));
-      entityResults.push(...chunkResults);
     }
 
     // Process entity results

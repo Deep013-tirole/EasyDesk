@@ -1240,7 +1240,52 @@ const PRESEEDED_AUDIT_LOGS: AuditLog[] = [
   { id: 'log-2', userId: 'super-admin-deepak', userName: 'Deepak', userRole: 'SUPER_ADMIN', actionType: 'CONFIG_UPDATE', description: 'Updated global EasyDesk service charge fee margins across educational catalogs.', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() }
 ];
 
-// Memory state container
+// Helper function to build baseline seed state for blank databases
+function getBaselineSeedState(): Record<string, any> {
+  return {
+    users: [...PRESEEDED_USERS],
+    customers: [...PRESEEDED_CUSTOMERS],
+    admins: [...PRESEEDED_ADMINS],
+    roles: [] as any[],
+    permissions: [] as any[],
+    sessions: [] as any[],
+    refreshTokens: [] as any[],
+    categories: [...PRESEEDED_CATEGORIES] as ServiceCategory[],
+    blogCategories: [...PRESEEDED_BLOG_CATEGORIES] as BlogCategory[],
+    services: [...PRESEEDED_SERVICES],
+    orders: [...SEEDED_ORDERS] as Order[],
+    tickets: [...SEEDED_TICKETS] as SupportTicket[],
+    coupons: [...PRESEEDED_COUPONS],
+    reviews: [...PRESEEDED_REVIEWS],
+    blogs: [...PRESEEDED_BLOGS],
+    notifications: [] as Notification[],
+    faqs: [...PRESEEDED_FAQS],
+    banners: [...PRESEEDED_BANNERS],
+    media: [...PRESEEDED_MEDIA] as MediaItem[],
+    calendarEvents: [...PRESEEDED_CALENDAR_EVENTS] as CalendarEvent[],
+    pages: [...PRESEEDED_PAGES],
+    settings: { ...PRESEEDED_SETTINGS },
+    paymentConfig: { ...PRESEEDED_PAYMENT_CONFIG },
+    paymentSettings: { ...PRESEEDED_PAYMENT_CONFIG },
+    auditLogs: [...PRESEEDED_AUDIT_LOGS] as any[],
+    founder: { ...PRESEEDED_FOUNDER },
+    team: [...PRESEEDED_TEAM],
+    employees: [...PRESEEDED_EMPLOYEES] as EmployeeProfile[],
+    employeeKYC: { ...PRESEEDED_EMPLOYEE_KYC } as Record<string, EmployeeKYC>,
+    employeePayroll: { ...PRESEEDED_EMPLOYEE_PAYROLL } as Record<string, EmployeePayroll>,
+    employeeAccounts: { ...PRESEEDED_EMPLOYEE_ACCOUNTS } as Record<string, EmployeeAccount>,
+    employeeDocuments: [] as any[],
+    contactMessages: [] as any[],
+    masterData: { ...PRESEEDED_MASTER_DATA },
+    aboutUs: { ...PRESEEDED_ABOUT_US },
+    companyProfile: { ...PRESEEDED_COMPANY_PROFILE },
+    contactSettings: { ...PRESEEDED_CONTACT_SETTINGS },
+    privacySecuritySettings: { ...PRESEEDED_PRIVACY_SECURITY_SETTINGS },
+    privacySecurity: { ...PRESEEDED_PRIVACY_SECURITY_SETTINGS }
+  };
+}
+
+// Memory state container - starts clean so authoritative Firestore data is always served
 let dbState: Record<string, any> = {
   users: [...PRESEEDED_USERS],
   customers: [] as any[],
@@ -1249,30 +1294,30 @@ let dbState: Record<string, any> = {
   permissions: [] as any[],
   sessions: [] as any[],
   refreshTokens: [] as any[],
-  categories: [...PRESEEDED_CATEGORIES] as ServiceCategory[],
-  blogCategories: [...PRESEEDED_BLOG_CATEGORIES] as BlogCategory[],
-  services: [...PRESEEDED_SERVICES],
+  categories: [] as ServiceCategory[],
+  blogCategories: [] as BlogCategory[],
+  services: [] as Service[],
   orders: [] as Order[],
   tickets: [] as SupportTicket[],
-  coupons: [...PRESEEDED_COUPONS],
-  reviews: [...PRESEEDED_REVIEWS],
-  blogs: [...PRESEEDED_BLOGS],
+  coupons: [] as any[],
+  reviews: [] as any[],
+  blogs: [] as any[],
   notifications: [] as Notification[],
-  faqs: [...PRESEEDED_FAQS],
-  banners: [...PRESEEDED_BANNERS],
-  media: [...PRESEEDED_MEDIA] as MediaItem[],
-  calendarEvents: [...PRESEEDED_CALENDAR_EVENTS] as CalendarEvent[],
-  pages: [...PRESEEDED_PAGES],
+  faqs: [] as any[],
+  banners: [] as any[],
+  media: [] as MediaItem[],
+  calendarEvents: [] as CalendarEvent[],
+  pages: [] as any[],
   settings: { ...PRESEEDED_SETTINGS },
   paymentConfig: { ...PRESEEDED_PAYMENT_CONFIG },
   paymentSettings: { ...PRESEEDED_PAYMENT_CONFIG },
-  auditLogs: [...PRESEEDED_AUDIT_LOGS] as any[],
+  auditLogs: [] as any[],
   founder: { ...PRESEEDED_FOUNDER },
-  team: [...PRESEEDED_TEAM],
-  employees: [...PRESEEDED_EMPLOYEES] as EmployeeProfile[],
-  employeeKYC: { ...PRESEEDED_EMPLOYEE_KYC } as Record<string, EmployeeKYC>,
-  employeePayroll: { ...PRESEEDED_EMPLOYEE_PAYROLL } as Record<string, EmployeePayroll>,
-  employeeAccounts: { ...PRESEEDED_EMPLOYEE_ACCOUNTS } as Record<string, EmployeeAccount>,
+  team: [] as any[],
+  employees: [] as EmployeeProfile[],
+  employeeKYC: {} as Record<string, EmployeeKYC>,
+  employeePayroll: {} as Record<string, EmployeePayroll>,
+  employeeAccounts: {} as Record<string, EmployeeAccount>,
   employeeDocuments: [] as EmployeeDocument[],
   aboutUs: { ...PRESEEDED_ABOUT_US },
   contactSettings: { ...PRESEEDED_CONTACT_SETTINGS },
@@ -2728,6 +2773,18 @@ function xssSanitizer(req: express.Request, res: express.Response, next: express
   }
   next();
 }
+
+// Database readiness middleware - ensures Firestore state is hydrated before handling API requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    try {
+      await ensureDatabaseReady();
+    } catch (err) {
+      console.warn('[DB] Error waiting for database readiness:', err);
+    }
+  }
+  next();
+});
 
 // Apply core security middlewares globally
 app.use(helmetSecurity);
