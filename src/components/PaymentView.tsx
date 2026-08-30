@@ -28,7 +28,18 @@ export default function PaymentView({
   currentUser: User | null; 
   setView: (view: string) => void;
 }) {
-  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_payment_config');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.upiId || parsed.bankName || parsed.accountNumber)) {
+          return { ...DEFAULT_PAYMENT_CONFIG, ...parsed };
+        }
+      }
+    } catch {}
+    return DEFAULT_PAYMENT_CONFIG;
+  });
   const [loadingConfig, setLoadingConfig] = useState(false);
 
   // Active method selection
@@ -59,7 +70,13 @@ export default function PaymentView({
         if (res.ok) {
           const data = await safeParseJsonResponse<any>(res);
           if (data && (data.upiId || data.bankName || data.accountNumber) && isMounted) {
-            setPaymentConfig(prev => ({ ...prev, ...data }));
+            setPaymentConfig(prev => {
+              const updated = { ...prev, ...data };
+              try {
+                localStorage.setItem('easydesk_cache_payment_config', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
             return;
           }
         }
@@ -74,7 +91,13 @@ export default function PaymentView({
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directPay = await getClientPaymentConfig();
           if (directPay && isMounted) {
-            setPaymentConfig(prev => ({ ...prev, ...directPay }));
+            setPaymentConfig(prev => {
+              const updated = { ...prev, ...directPay };
+              try {
+                localStorage.setItem('easydesk_cache_payment_config', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
           }
         }
       } catch (fsErr: any) {

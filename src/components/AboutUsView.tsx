@@ -138,8 +138,26 @@ const DEFAULT_ABOUT_DATA: AboutUsData = {
 };
 
 export default function AboutUsView({ setView }: { setView: (v: string) => void }) {
-  const [aboutData, setAboutData] = useState<AboutUsData>(DEFAULT_ABOUT_DATA);
-  const [founder, setFounder] = useState<FounderData>(DEFAULT_FOUNDER);
+  const [aboutData, setAboutData] = useState<AboutUsData>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_about_us');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.story || parsed.coreValues || parsed.whyChooseUs)) return parsed;
+      }
+    } catch {}
+    return DEFAULT_ABOUT_DATA;
+  });
+  const [founder, setFounder] = useState<FounderData>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_founder');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.name) return parsed;
+      }
+    } catch {}
+    return DEFAULT_FOUNDER;
+  });
   const [loading, setLoading] = useState(false);
   const [activeValueIndex, setActiveValueIndex] = useState<number | null>(0);
   const [activeStepHover, setActiveStepHover] = useState<number | null>(null);
@@ -161,7 +179,15 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
           const data = await safeParseJsonResponse<any>(res);
           if (data && data.aboutUs && isMounted) {
             setAboutData(data.aboutUs);
-            if (data.founder) setFounder(data.founder);
+            try {
+              localStorage.setItem('easydesk_cache_about_us', JSON.stringify(data.aboutUs));
+            } catch {}
+            if (data.founder) {
+              setFounder(data.founder);
+              try {
+                localStorage.setItem('easydesk_cache_founder', JSON.stringify(data.founder));
+              } catch {}
+            }
             return;
           }
         }
@@ -176,8 +202,18 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directAbout = await getClientAboutUs();
           if (isMounted) {
-            if (directAbout.aboutUs) setAboutData(directAbout.aboutUs);
-            if (directAbout.founder) setFounder(directAbout.founder);
+            if (directAbout.aboutUs) {
+              setAboutData(directAbout.aboutUs);
+              try {
+                localStorage.setItem('easydesk_cache_about_us', JSON.stringify(directAbout.aboutUs));
+              } catch {}
+            }
+            if (directAbout.founder) {
+              setFounder(directAbout.founder);
+              try {
+                localStorage.setItem('easydesk_cache_founder', JSON.stringify(directAbout.founder));
+              } catch {}
+            }
           }
         }
       } catch (fsErr: any) {

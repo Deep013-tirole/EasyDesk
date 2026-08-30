@@ -53,7 +53,18 @@ const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
 };
 
 export default function ContactView({ setView }: { setView?: (v: string) => void }) {
-  const [contactInfo, setContactInfo] = useState<ContactSettings>(DEFAULT_CONTACT_SETTINGS);
+  const [contactInfo, setContactInfo] = useState<ContactSettings>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_contact_settings');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.phone || parsed.email || parsed.companyName)) {
+          return { ...DEFAULT_CONTACT_SETTINGS, ...parsed };
+        }
+      }
+    } catch {}
+    return DEFAULT_CONTACT_SETTINGS;
+  });
   const [loading, setLoading] = useState(false);
 
   // Form fields
@@ -81,7 +92,13 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
         if (res.ok) {
           const data = await safeParseJsonResponse<any>(res);
           if (data && (data.phone || data.email || data.companyName) && isMounted) {
-            setContactInfo(prev => ({ ...prev, ...data }));
+            setContactInfo(prev => {
+              const updated = { ...prev, ...data };
+              try {
+                localStorage.setItem('easydesk_cache_contact_settings', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
             return;
           }
         }
@@ -96,7 +113,13 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directContact = await getClientContactSettings();
           if (directContact && isMounted) {
-            setContactInfo(prev => ({ ...prev, ...directContact }));
+            setContactInfo(prev => {
+              const updated = { ...prev, ...directContact };
+              try {
+                localStorage.setItem('easydesk_cache_contact_settings', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
           }
         }
       } catch (fsErr: any) {

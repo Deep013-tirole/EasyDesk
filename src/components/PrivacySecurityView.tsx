@@ -205,8 +205,17 @@ const DEFAULT_PRIVACY_SECURITY_FALLBACK: PrivacySecurityData = {
 };
 
 export default function PrivacySecurityView({ setView }: { setView?: (v: string) => void }) {
-  const [data, setData] = useState<PrivacySecurityData>(DEFAULT_PRIVACY_SECURITY_FALLBACK);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PrivacySecurityData>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_privacy_security');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.hero || parsed.policies)) return parsed;
+      }
+    } catch {}
+    return DEFAULT_PRIVACY_SECURITY_FALLBACK;
+  });
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
@@ -248,6 +257,9 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
           const json = await safeParseJsonResponse<any>(res);
           if (json && json.hero) {
             setData(json);
+            try {
+              localStorage.setItem('easydesk_cache_privacy_security', JSON.stringify(json));
+            } catch {}
             return;
           }
         }
@@ -263,6 +275,9 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
           const firestoreData = await getClientPrivacySecurity();
           if (firestoreData && firestoreData.hero) {
             setData(firestoreData);
+            try {
+              localStorage.setItem('easydesk_cache_privacy_security', JSON.stringify(firestoreData));
+            } catch {}
             return;
           }
         }
@@ -271,10 +286,6 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
           console.warn('Direct Firestore fetch for privacy-security failed:', fsErr?.message || fsErr);
         }
       }
-
-      // 3. Guaranteed Default Schema Fallback (Never leaves page blank)
-      setData(DEFAULT_PRIVACY_SECURITY_FALLBACK);
-      setLoading(false);
     };
 
     fetchContent().finally(() => setLoading(false));

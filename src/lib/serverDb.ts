@@ -535,17 +535,23 @@ export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | nu
       }
     }
 
-    // If no queries succeeded at all, do not assume fresh database (network is down)
+    // If no queries succeeded at all, do not assume fresh database (network is down or slow)
     if (successfulQueryCount === 0) {
       console.warn('[FIREBASE REST] All Firestore collection queries failed. Retaining current in-memory state.');
       return null;
     }
 
+    const anyQueryFailed = !settingsRes.success || entityResults.some(r => !r.success);
     const systemInitDoc = settingsResult['system_init'];
     const isAlreadyInitialized = !!systemInitDoc || totalDocsLoaded > 0 || settingsCount > 0;
 
     if (!isAlreadyInitialized) {
-      console.log('[FIREBASE REST] Fresh database detected. Ready for initial seeding.');
+      // If any collection query failed due to network / offline / timeout, DO NOT seed or treat as fresh
+      if (anyQueryFailed) {
+        console.warn('[FIREBASE REST] Some collection queries failed due to network/timeout. Retaining current state and skipping fresh database seed.');
+        return { state: stateFromDb, isFreshDatabase: false, totalDocsLoaded };
+      }
+      console.log('[FIREBASE REST] Verified genuine empty database (all queries succeeded with 0 records). Ready for initial seeding.');
       return { state: {}, isFreshDatabase: true, totalDocsLoaded: 0 };
     }
 

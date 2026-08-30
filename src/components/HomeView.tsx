@@ -76,23 +76,48 @@ export default function HomeView({
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [contactInfo, setContactInfo] = useState({
-    phone: '+91 98765 43210',
-    email: 'support@easydesk.com',
-    workingHours: 'Mon - Sat: 9:00 AM - 6:30 PM',
-    address: '402, Signature IT Park, Bandra Kurla Complex, Mumbai, MH, 400051'
+  const [contactInfo, setContactInfo] = useState(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_contact_settings');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.companyName) return parsed;
+      }
+    } catch {}
+    return {
+      companyName: 'EasyDesk Digital Services Pvt Ltd',
+      phone: '+91 98765 43210',
+      email: 'support@easydesk.com',
+      workingHours: 'Mon - Sat: 9:00 AM - 6:30 PM',
+      address: '402, Signature IT Park, Bandra Kurla Complex, Mumbai, MH, 400051'
+    };
   });
-  const [faqsList, setFaqsList] = useState(FAQS);
+
+  const [faqsList, setFaqsList] = useState<{ question: string; answer: string }[]>(() => {
+    try {
+      const cached = localStorage.getItem('easydesk_cache_faqs');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
 
   useEffect(() => {
     const applyContact = (data: any) => {
-      if (data) {
-        setContactInfo({
+      if (data && typeof data === 'object') {
+        const clean = {
+          companyName: data.companyName || 'EasyDesk Digital Services Pvt Ltd',
           phone: data.phone || '+91 98765 43210',
           email: data.email || 'support@easydesk.com',
           workingHours: data.workingHours || 'Mon - Sat: 9:00 AM - 6:30 PM',
           address: data.address || '402, Signature IT Park, Bandra Kurla Complex, Mumbai, MH, 400051'
-        });
+        };
+        setContactInfo(clean);
+        try {
+          localStorage.setItem('easydesk_cache_contact_settings', JSON.stringify(clean));
+        } catch {}
       }
     };
 
@@ -107,7 +132,7 @@ export default function HomeView({
       .then(data => applyContact(data))
       .catch(() => {});
 
-    // Fetch dynamic FAQs with multi-tier fallback
+    // Fetch dynamic FAQs with multi-tier fallback (retains last known real data on failure)
     const loadFaqs = async () => {
       try {
         const res = await fetch(`/api/faqs?_t=${Date.now()}`, {
@@ -126,6 +151,9 @@ export default function HomeView({
             })).filter(f => f.question && f.answer);
             if (mapped.length > 0) {
               setFaqsList(mapped);
+              try {
+                localStorage.setItem('easydesk_cache_faqs', JSON.stringify(mapped));
+              } catch {}
               return;
             }
           }
@@ -143,6 +171,9 @@ export default function HomeView({
             })).filter(f => f.question && f.answer);
             if (mapped.length > 0) {
               setFaqsList(mapped);
+              try {
+                localStorage.setItem('easydesk_cache_faqs', JSON.stringify(mapped));
+              } catch {}
             }
           }
         }

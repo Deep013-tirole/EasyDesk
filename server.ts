@@ -2341,7 +2341,9 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
       console.log('[DB] Successfully hydrated authoritative production dbState from Cloud Firestore!');
       isFirestoreReady = true;
     } else if (result && result.isFreshDatabase) {
-      console.log('[DB] Virgin Firestore database detected. Seeding initial baseline and system_init sentinel to Cloud Firestore...');
+      console.log('[DB] Verified genuine empty Firestore database detected. Seeding initial baseline and system_init sentinel to Cloud Firestore...');
+      const seedState = getBaselineSeedState();
+      Object.assign(dbState, seedState);
       normalizeDatabaseRelationships();
       await seedFirestoreFromInitialState(dbState);
       console.log('[DB] Baseline state and system_init sentinel successfully written to Cloud Firestore.');
@@ -5116,7 +5118,7 @@ app.get('/api/admin/employees/:id', authenticateToken, requirePermission(['emplo
 // GET Assignable Active Employees for Order Assignment Dropdown
 app.get('/api/admin/assignable-employees', authenticateToken, requirePermission(['employees.view', 'employees.manage', 'orders.view', 'orders.view_assigned']), (req, res) => {
   if (!dbState.employees) {
-    dbState.employees = [...PRESEEDED_EMPLOYEES];
+    dbState.employees = [];
   }
   if (!dbState.employeeAccounts) {
     dbState.employeeAccounts = {};
@@ -6129,7 +6131,7 @@ app.post('/api/admin/master-data', async (req, res) => {
 
 // ---------------- CUSTOMER RECORDS MANAGEMENT APIS ----------------
 app.get('/api/admin/customers', (req, res) => {
-  if (!dbState.customers) dbState.customers = [...PRESEEDED_CUSTOMERS];
+  if (!dbState.customers) dbState.customers = [];
   res.json(dbState.customers);
 });
 
@@ -7412,7 +7414,7 @@ app.delete('/api/admin/banners/:id', async (req, res) => {
 
 // Calendar Events CRUD
 app.get('/api/calendar', (req, res) => {
-  res.json(dbState.calendarEvents || PRESEEDED_CALENDAR_EVENTS);
+  res.json(dbState.calendarEvents || []);
 });
 
 app.post('/api/admin/calendar', async (req, res) => {
