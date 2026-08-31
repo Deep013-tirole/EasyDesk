@@ -211,12 +211,12 @@ export default function HomeView({
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white pt-10 pb-16 lg:pb-20 border-b border-slate-200/60">
         
         {/* Subtle Decorative Background Blur Blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full portal-container h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-96 h-96 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10">
+        <div className="portal-container relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
             
             {/* Left Content Column */}
@@ -376,7 +376,7 @@ export default function HomeView({
       </section>
 
       {/* 2. TRUST SECTION (Matching AboutUs Elevated Badges) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 -mt-7 relative z-20">
+      <section className="portal-container -mt-7 relative z-20">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 2xl:gap-5">
           {trustBadges.map((badge, idx) => {
             const Icon = badge.icon;
@@ -405,7 +405,7 @@ export default function HomeView({
       </section>
 
       {/* Live Statistics Bar (Matching AboutUs Metrics Atmosphere) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-14">
+      <section className="portal-container pt-14">
         <motion.div 
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -439,7 +439,7 @@ export default function HomeView({
       </section>
 
       {/* 3. SERVICES SECTION */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -536,7 +536,7 @@ export default function HomeView({
       </section>
 
       {/* 4. WHY CHOOSE EASYDESK (Matching AboutUs Core Value Cards) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -583,7 +583,7 @@ export default function HomeView({
       </section>
 
       {/* 5. SECURITY SECTION (Dedicated Premium Section with Dark Navy Background & Glassmorphism) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -699,7 +699,7 @@ export default function HomeView({
       </section>
 
       {/* 6. EASYDESK AI CHATBOT CARD (Interactive Glassmorphic Container) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -797,7 +797,7 @@ export default function HomeView({
       </section>
 
       {/* 7. CALENDAR & UPCOMING GOVERNMENT DEADLINES */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -861,7 +861,7 @@ export default function HomeView({
       </section>
 
       {/* 8. VERIFIED REVIEWS (Matching AboutUs Testimonial Refinement) */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -927,7 +927,7 @@ export default function HomeView({
       </section>
 
       {/* 9. BLOGS & ARTICLES */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -1013,7 +1013,7 @@ export default function HomeView({
       </section>
 
       {/* 11. CONTACT & LOCATION CARD (Matching AboutUs Split Card Aesthetics) */}
-      <section id="contact-section" className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
+      <section id="contact-section" className="portal-container pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}

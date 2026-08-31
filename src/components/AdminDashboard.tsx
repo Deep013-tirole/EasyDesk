@@ -1306,7 +1306,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
   const isOperator = true;
 
   return (
-    <div className="notranslate max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-8 font-sans text-slate-800" translate="no">
+    <div className="notranslate portal-container py-8 font-sans text-slate-800" translate="no">
       
       {/* Toast Notification Banner */}
       {actionNotif && (

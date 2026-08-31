@@ -61,12 +61,12 @@ export default function ServicesView({
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-10 sm:py-14 border-b border-slate-200/60 mb-8">
         
         {/* Subtle Decorative Background Blur */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full portal-container h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-80 h-80 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/2 -right-20 w-72 h-72 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10">
+        <div className="portal-container relative z-10">
           <motion.div 
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -105,7 +105,7 @@ export default function ServicesView({
         </div>
       </section>
 
-      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
+      <div className="portal-container">
         
         {/* 2. FILTER AND SEARCH BAR (Polished Container with Focus Glow) */}
         <div className="bg-white border border-slate-200/80 rounded-3xl shadow-sm p-4 sm:p-5 mb-8 hover-glow-blue transition-all duration-300">

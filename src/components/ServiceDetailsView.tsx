@@ -150,7 +150,7 @@ export default function ServiceDetailsView({
       
       {/* 1. BREADCRUMBS BAR */}
       <div className="bg-white border-b border-slate-200/80 sticky top-16 z-30 shadow-xs">
-        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-3">
+        <div className="portal-container py-3">
           <div className="flex items-center justify-between gap-4 text-xs font-medium">
             <nav className="flex items-center gap-1.5 text-slate-500 overflow-x-auto whitespace-nowrap scrollbar-none">
               <button 
@@ -210,7 +210,7 @@ export default function ServiceDetailsView({
 
       {/* 2. SERVICE HERO SECTION */}
       <section className="bg-white border-b border-slate-200/80 pt-8 pb-10">
-        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
+        <div className="portal-container">
           <div className="grid lg:grid-cols-12 gap-8 items-start">
             
             {/* Left Hero Content */}
@@ -318,7 +318,7 @@ export default function ServiceDetailsView({
       </section>
 
       {/* 3. MAIN SECTION WITH TWO-COLUMN CONTENT + STICKY SIDEBAR */}
-      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-8">
+      <div className="portal-container pt-8">
         <div className="grid lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: NAVIGATION + CONTENT MODULES */}
@@ -693,7 +693,7 @@ export default function ServiceDetailsView({
       </div>
 
       {/* 4. RELATED SERVICES SECTION */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-16">
+      <section className="portal-container pt-16">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg sm:text-xl font-black text-slate-900">Related Services in {categoryName}</h2>
@@ -762,7 +762,7 @@ export default function ServiceDetailsView({
       </section>
 
       {/* 5. CUSTOMER REVIEWS SECTION */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-16">
+      <section className="portal-container pt-16">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xs">
           
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-6">
@@ -845,7 +845,7 @@ export default function ServiceDetailsView({
       </section>
 
       {/* 6. TRUST / SUPPORT FINAL CTA BAR */}
-      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-12">
+      <section className="portal-container pt-12">
         <div className="bg-gradient-to-r from-[#0F4C81] via-blue-900 to-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-800/40">
           <div className="space-y-1 text-center md:text-left">
             <h2 className="text-lg sm:text-xl font-black text-white">Need help with this service?</h2>
