@@ -19,6 +19,46 @@ export const CATALOG_CACHE_KEYS = {
   LAST_UPDATED: 'easydesk_cache_last_updated'
 };
 
+const KNOWN_DEMO_SERVICE_IDS = new Set(['passport', 'gst-reg', 'msme', 'scholarship', 'resume', 'web-dev']);
+const KNOWN_DEMO_CAT_IDS = new Set(['gov', 'biz', 'edu', 'pers', 'util', 'legal', 'fin', 'it']);
+
+function sanitizeCachedData<T>(key: string, data: T): T {
+  if (!Array.isArray(data)) return data;
+  if (key === CATALOG_CACHE_KEYS.SERVICES) {
+    const cleaned = data.filter((item: any) => item && !KNOWN_DEMO_SERVICE_IDS.has(item.id));
+    return cleaned as unknown as T;
+  }
+  if (key === CATALOG_CACHE_KEYS.CATEGORIES || key === CATALOG_CACHE_KEYS.CATEGORIES_ALL) {
+    const cleaned = data.filter((item: any) => item && !KNOWN_DEMO_CAT_IDS.has(item.id));
+    return cleaned as unknown as T;
+  }
+  return data;
+}
+
+// Immediately purge obsolete demo caches if present
+(function purgeLegacyDemoCaches() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const purgedFlag = localStorage.getItem('easydesk_demo_cache_purged_v4');
+    if (!purgedFlag) {
+      const rawServ = localStorage.getItem(CATALOG_CACHE_KEYS.SERVICES);
+      if (rawServ) {
+        try {
+          const parsed = JSON.parse(rawServ);
+          if (Array.isArray(parsed) && parsed.some((s: any) => s && KNOWN_DEMO_SERVICE_IDS.has(s.id))) {
+            localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
+            localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
+            localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
+            localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
+            localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
+          }
+        } catch {}
+      }
+      localStorage.setItem('easydesk_demo_cache_purged_v4', 'true');
+    }
+  } catch {}
+})();
+
 /**
  * Reads cached data from localStorage safely.
  */
@@ -30,7 +70,8 @@ export function getCachedCatalog<T>(key: string, fallback: T): T {
     if (Array.isArray(fallback) && !Array.isArray(parsed)) {
       return fallback;
     }
-    return parsed as T;
+    const sanitized = sanitizeCachedData<T>(key, parsed as T);
+    return sanitized;
   } catch (err) {
     console.warn(`[CatalogService] Error reading cache for ${key}:`, err);
     return fallback;
@@ -42,7 +83,8 @@ export function getCachedCatalog<T>(key: string, fallback: T): T {
  */
 export function setCachedCatalog<T>(key: string, data: T): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    const sanitized = sanitizeCachedData<T>(key, data);
+    localStorage.setItem(key, JSON.stringify(sanitized));
     localStorage.setItem(CATALOG_CACHE_KEYS.LAST_UPDATED, new Date().toISOString());
   } catch (err) {
     console.warn(`[CatalogService] Error writing cache for ${key}:`, err);

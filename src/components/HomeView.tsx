@@ -381,7 +381,14 @@ export default function HomeView({
           {trustBadges.map((badge, idx) => {
             const Icon = badge.icon;
             return (
-              <div key={idx} className="h-full">
+              <motion.div 
+                key={idx} 
+                className="h-full"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.4, delay: idx * 0.08, ease: "easeOut" }}
+              >
                 <div className="h-full bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs hover-lift hover-glow-blue transition-all duration-300 flex flex-row items-start gap-3.5 group">
                   <div className="w-9 h-9 rounded-2xl bg-blue-50 text-[#0F4C81] border border-blue-100 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#0F4C81] group-hover:text-white transition-colors duration-200 shadow-2xs">
                     <Icon className="w-4 h-4 floating-icon-bounce" />
@@ -391,7 +398,7 @@ export default function HomeView({
                     <p className="text-[11px] text-slate-500 mt-0.5 m-0 leading-snug font-normal">{badge.desc}</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -399,28 +406,47 @@ export default function HomeView({
 
       {/* Live Statistics Bar (Matching AboutUs Metrics Atmosphere) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14">
-        <div className="bg-gradient-to-br from-[#0F4C81] via-[#0D3F6C] to-[#0A3258] text-white rounded-3xl shadow-xl p-7 md:p-9 hover-glow-blue transition-all duration-300 border border-blue-800/40 relative overflow-hidden">
+        <motion.div 
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="bg-gradient-to-br from-[#0F4C81] via-[#0D3F6C] to-[#0A3258] text-white rounded-3xl shadow-xl p-7 md:p-9 hover-glow-blue transition-all duration-300 border border-blue-800/40 relative overflow-hidden"
+        >
           {/* Subtle background glow */}
           <div className="absolute -top-20 -right-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
             {stats.map((stat, idx) => (
-              <div key={idx} className="text-center lg:border-r border-white/10 last:border-0 px-3 flex flex-col justify-center hover-scale-sm transition-transform">
+              <motion.div 
+                key={idx} 
+                initial={{ opacity: 0, scale: 0.92 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: 0.1 + idx * 0.08 }}
+                className="text-center lg:border-r border-white/10 last:border-0 px-3 flex flex-col justify-center hover-scale-sm transition-transform"
+              >
                 <span className="block text-3xl sm:text-4xl font-black text-white tracking-tight">
                   {stat.value}
                 </span>
                 <span className="block text-xs font-extrabold text-blue-200 mt-1.5 uppercase tracking-wider">{stat.label}</span>
                 <span className="block text-[11px] text-blue-100/80 mt-1 leading-normal max-w-[200px] mx-auto font-normal">{stat.desc}</span>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* 3. SERVICES SECTION */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-8 gap-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.45 }}
+          className="flex flex-col sm:flex-row justify-between sm:items-end mb-8 gap-4"
+        >
           <div>
             <span className="badge-soft-primary px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">
               Directory Catalog
@@ -434,11 +460,18 @@ export default function HomeView({
           >
             Explore all 100+ Services <ArrowRight className="w-4 h-4" />
           </button>
-        </div>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredServices.map((service) => (
-            <div key={service.id} className="h-full">
+          {featuredServices.map((service, idx) => (
+            <motion.div 
+              key={service.id} 
+              className="h-full"
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{ duration: 0.45, delay: idx * 0.08, ease: "easeOut" }}
+            >
               <div className="h-full bg-white border border-slate-200/80 rounded-3xl overflow-hidden shadow-xs hover-lift hover-glow-blue transition-all duration-300 flex flex-col justify-between group">
                 <div className="p-6 flex-1">
                   <div className="flex items-center justify-between">
@@ -497,26 +530,39 @@ export default function HomeView({
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
 
       {/* 4. WHY CHOOSE EASYDESK (Matching AboutUs Core Value Cards) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="text-center max-w-2xl mx-auto mb-12">
+        <motion.div 
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.45 }}
+          className="text-center max-w-2xl mx-auto mb-12"
+        >
           <span className="badge-soft-success px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">Verified Standard</span>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mt-2 text-slate-900 tracking-tight">Why Choose EasyDesk</h2>
           <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
             We combine expert document auditing, transparent pricing, and direct WhatsApp communication to make your application error-free.
           </p>
-        </div>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {whyChooseFeatures.map((feat, idx) => {
             const Icon = feat.icon;
             return (
-              <div key={idx} className="h-full">
+              <motion.div 
+                key={idx} 
+                className="h-full"
+                initial={{ opacity: 0, y: 28 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                transition={{ duration: 0.45, delay: idx * 0.08, ease: "easeOut" }}
+              >
                 <div className="h-full bg-white p-7 rounded-3xl border border-slate-200/80 shadow-xs hover-lift hover-glow-blue transition-all duration-300 group flex flex-col justify-between">
                   <div>
                     <div className={`w-13 h-13 rounded-2xl flex items-center justify-center ${feat.color} border shadow-2xs floating-icon-bounce`}>
@@ -530,7 +576,7 @@ export default function HomeView({
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -538,7 +584,13 @@ export default function HomeView({
 
       {/* 5. SECURITY SECTION (Dedicated Premium Section with Dark Navy Background & Glassmorphism) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="bg-gradient-to-br from-[#0F4C81] via-[#0B2545] to-[#07192F] text-white rounded-3xl p-7 sm:p-10 lg:p-12 shadow-2xl space-y-8 relative overflow-hidden hover-glow-blue transition-all duration-300 border border-blue-900/50">
+        <motion.div 
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="bg-gradient-to-br from-[#0F4C81] via-[#0B2545] to-[#07192F] text-white rounded-3xl p-7 sm:p-10 lg:p-12 shadow-2xl space-y-8 relative overflow-hidden hover-glow-blue transition-all duration-300 border border-blue-900/50"
+        >
           
           {/* Decorative Corner Watermark */}
           <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full blur-3xl opacity-25 pointer-events-none bg-cyan-400" />
@@ -559,38 +611,66 @@ export default function HomeView({
 
           {/* Security Features Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
-            <div className="h-full bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 space-y-2.5 hover-lift-sm hover:border-cyan-300 transition-all text-white">
-              <div className="w-10 h-10 rounded-xl bg-cyan-400/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300">
-                <Lock className="w-5 h-5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-white m-0">256-Bit SSL Encryption</h4>
-              <p className="text-xs text-blue-100/80 leading-relaxed m-0 font-normal">Industrial grade transport encryption for all uploaded PDFs & images.</p>
-            </div>
-            <div className="h-full bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 space-y-2.5 hover-lift-sm hover:border-emerald-300 transition-all text-white">
-              <div className="w-10 h-10 rounded-xl bg-emerald-400/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
-                <EyeOff className="w-5 h-5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-white m-0">Privacy Protection</h4>
-              <p className="text-xs text-blue-100/80 leading-relaxed m-0 font-normal">Strict non-disclosure agreements. We NEVER sell or share data with 3rd parties.</p>
-            </div>
-            <div className="h-full bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 space-y-2.5 hover-lift-sm hover:border-amber-300 transition-all text-white">
-              <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-white m-0">Document Safety</h4>
-              <p className="text-xs text-blue-100/80 leading-relaxed m-0 font-normal">Officer-only access controls and automated data purge upon order delivery.</p>
-            </div>
-            <div className="h-full bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 space-y-2.5 hover-lift-sm hover:border-purple-300 transition-all text-white">
-              <div className="w-10 h-10 rounded-xl bg-purple-400/20 border border-purple-400/30 flex items-center justify-center text-purple-300">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <h4 className="font-extrabold text-sm text-white m-0">Government Compliance</h4>
-              <p className="text-xs text-blue-100/80 leading-relaxed m-0 font-normal">Adherence to official NSDL, Passport Seva, and GST portal filing protocols.</p>
-            </div>
+            {[
+              {
+                icon: Lock,
+                title: "256-Bit SSL Encryption",
+                desc: "Industrial grade transport encryption for all uploaded PDFs & images.",
+                color: "cyan"
+              },
+              {
+                icon: EyeOff,
+                title: "Privacy Protection",
+                desc: "Strict non-disclosure agreements. We NEVER sell or share data with 3rd parties.",
+                color: "emerald"
+              },
+              {
+                icon: ShieldCheck,
+                title: "Document Safety",
+                desc: "Officer-only access controls and automated data purge upon order delivery.",
+                color: "amber"
+              },
+              {
+                icon: Building2,
+                title: "Government Compliance",
+                desc: "Adherence to official NSDL, Passport Seva, and GST portal filing protocols.",
+                color: "purple"
+              }
+            ].map((item, sIdx) => {
+              const SIcon = item.icon;
+              const borderHoverColor = item.color === 'cyan' ? 'hover:border-cyan-300' :
+                                       item.color === 'emerald' ? 'hover:border-emerald-300' :
+                                       item.color === 'amber' ? 'hover:border-amber-300' : 'hover:border-purple-300';
+              const iconBg = item.color === 'cyan' ? 'bg-cyan-400/20 border-cyan-400/30 text-cyan-300' :
+                             item.color === 'emerald' ? 'bg-emerald-400/20 border-emerald-400/30 text-emerald-300' :
+                             item.color === 'amber' ? 'bg-amber-400/20 border-amber-400/30 text-amber-300' : 'bg-purple-400/20 border-purple-400/30 text-purple-300';
+              return (
+                <motion.div 
+                  key={sIdx}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.4, delay: 0.1 + sIdx * 0.08 }}
+                  className={`h-full bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 space-y-2.5 hover-lift-sm ${borderHoverColor} transition-all text-white`}
+                >
+                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${iconBg}`}>
+                    <SIcon className="w-5 h-5" />
+                  </div>
+                  <h4 className="font-extrabold text-sm text-white m-0">{item.title}</h4>
+                  <p className="text-xs text-blue-100/80 leading-relaxed m-0 font-normal">{item.desc}</p>
+                </motion.div>
+              );
+            })}
           </div>
 
           {/* CRITICAL RED ALERT CALLOUT BOX ("NEVER ASK FOR") */}
-          <div className="bg-red-950/80 backdrop-blur-md border border-red-500/50 rounded-2xl p-5 sm:p-6 text-red-100 space-y-3 relative z-10 hover-lift-sm transition-all shadow-lg">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.96 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.45, delay: 0.2 }}
+            className="bg-red-950/80 backdrop-blur-md border border-red-500/50 rounded-2xl p-5 sm:p-6 text-red-100 space-y-3 relative z-10 hover-lift-sm transition-all shadow-lg"
+          >
             <div className="flex items-center gap-2.5">
               <ShieldAlert className="w-6 h-6 text-red-400 shrink-0" />
               <h3 className="font-black text-sm text-red-200 uppercase tracking-wider m-0">
@@ -613,14 +693,20 @@ export default function HomeView({
                 </span>
               ))}
             </div>
-          </div>
+          </motion.div>
 
-        </div>
+        </motion.div>
       </section>
 
       {/* 6. EASYDESK AI CHATBOT CARD (Interactive Glassmorphic Container) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="bg-white border border-blue-200/80 rounded-3xl p-7 sm:p-9 shadow-xl relative overflow-hidden hover-glow-blue transition-all duration-300">
+        <motion.div 
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="bg-white border border-blue-200/80 rounded-3xl p-7 sm:p-9 shadow-xl relative overflow-hidden hover-glow-blue transition-all duration-300"
+        >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             
             <div className="lg:col-span-7 space-y-4">
@@ -676,7 +762,13 @@ export default function HomeView({
             </div>
 
             <div className="lg:col-span-5">
-              <div className="bg-slate-50/90 p-5 rounded-3xl border border-slate-200/80 space-y-4 hover-lift-sm transition-all shadow-xs">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.45, delay: 0.15 }}
+                className="bg-slate-50/90 p-5 rounded-3xl border border-slate-200/80 space-y-4 hover-lift-sm transition-all shadow-xs"
+              >
                 <div className="flex items-center gap-2.5 border-b border-slate-200/70 pb-3">
                   <div className="w-9 h-9 rounded-2xl bg-[#0F4C81] text-white flex items-center justify-center font-black shadow-xs">
                     <Bot className="w-4 h-4" />
@@ -697,16 +789,22 @@ export default function HomeView({
                     </p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
 
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* 7. CALENDAR & UPCOMING GOVERNMENT DEADLINES */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-7 sm:p-9 shadow-sm space-y-6 hover-glow-blue transition-all duration-300">
+        <motion.div 
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="bg-white border border-slate-200/80 rounded-3xl p-7 sm:p-9 shadow-sm space-y-6 hover-glow-blue transition-all duration-300"
+        >
           <div className="flex flex-col sm:flex-row justify-between sm:items-end border-b border-slate-100 pb-5 gap-3">
             <div>
               <span className="badge-soft-purple px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">
@@ -726,7 +824,14 @@ export default function HomeView({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {govtEvents.map((evt, eIdx) => (
-              <div key={eIdx} className="h-full">
+              <motion.div 
+                key={eIdx} 
+                className="h-full"
+                initial={{ opacity: 0, y: 22 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.4, delay: eIdx * 0.08, ease: "easeOut" }}
+              >
                 <div className="h-full bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80 space-y-3 flex flex-col justify-between hover-lift hover:border-blue-300 transition-all duration-200 group">
                   <div>
                     <div className="flex items-center justify-between">
@@ -749,15 +854,21 @@ export default function HomeView({
                     <MessageSquare className="w-3.5 h-3.5 text-[#10B981]" /> Order on WhatsApp →
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* 8. VERIFIED REVIEWS (Matching AboutUs Testimonial Refinement) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.45 }}
+          className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10"
+        >
           <div>
             <span className="badge-soft-warning px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">Verified Feedback</span>
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mt-2 text-slate-900 tracking-tight">What Our Customers Say</h2>
@@ -769,11 +880,18 @@ export default function HomeView({
           >
             <Edit3 className="w-4 h-4 text-cyan-300" /> Write a Review
           </button>
-        </div>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {reviews.map((rev) => (
-            <div key={rev.id} className="h-full">
+          {reviews.map((rev, idx) => (
+            <motion.div 
+              key={rev.id} 
+              className="h-full"
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{ duration: 0.45, delay: idx * 0.08, ease: "easeOut" }}
+            >
               <div className="h-full bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-7 shadow-sm hover-lift hover-glow-blue transition-all duration-300 flex flex-col justify-between group">
                 <div>
                   <div className="flex items-center gap-1">
@@ -797,7 +915,7 @@ export default function HomeView({
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
 
@@ -810,7 +928,13 @@ export default function HomeView({
 
       {/* 9. BLOGS & ARTICLES */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="flex justify-between items-end mb-8">
+        <motion.div 
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.45 }}
+          className="flex justify-between items-end mb-8"
+        >
           <div>
             <span className="badge-soft-primary px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">
               INSIGHTS & GUIDES
@@ -826,31 +950,51 @@ export default function HomeView({
           >
             <span>All Guides</span> <ArrowRight className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {blogs.slice(0, 3).map((blog) => (
-            <div key={blog.id} className="h-full">
+          {blogs.slice(0, 3).map((blog, idx) => (
+            <motion.div 
+              key={blog.id} 
+              className="h-full"
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{ duration: 0.45, delay: idx * 0.1, ease: "easeOut" }}
+            >
               <BlogCard
                 blog={blog}
                 blogCategories={blogCategories}
                 onSelect={() => setView('blogs')}
               />
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
 
       {/* 10. SUPPORT FAQS ACCORDION */}
       <section id="faq-section" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="text-center mb-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.45 }}
+          className="text-center mb-10"
+        >
           <span className="badge-soft-primary px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">Need Assistance?</span>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mt-2 text-slate-900 tracking-tight">Frequently Asked Questions</h2>
-        </div>
+        </motion.div>
 
         <div className="space-y-3.5">
           {faqs.map((faq, idx) => (
-            <div key={idx} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs hover-glow-blue transition-all duration-200">
+            <motion.div 
+              key={idx} 
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.35, delay: idx * 0.05, ease: "easeOut" }}
+              className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs hover-glow-blue transition-all duration-200"
+            >
               <button
                 onClick={() => setOpenFaqIdx(openFaqIdx === idx ? null : idx)}
                 className="w-full text-left p-4 sm:p-5 flex justify-between items-center text-xs sm:text-sm font-extrabold text-slate-900 hover:bg-slate-50 transition cursor-pointer"
@@ -863,14 +1007,20 @@ export default function HomeView({
                   {faq.a}
                 </div>
               )}
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
 
       {/* 11. CONTACT & LOCATION CARD (Matching AboutUs Split Card Aesthetics) */}
       <section id="contact-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
-        <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xl hover-glow-blue transition-all duration-300">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xl hover-glow-blue transition-all duration-300"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2">
             
             {/* Office details */}
@@ -981,7 +1131,7 @@ export default function HomeView({
             </div>
 
           </div>
-        </div>
+        </motion.div>
       </section>
 
     </div>

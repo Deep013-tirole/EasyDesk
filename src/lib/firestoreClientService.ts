@@ -6,7 +6,7 @@ import { Service, ServiceCategory, Blog, BlogCategory, Review, User, UserRole } 
 /**
  * Timeout helper to prevent hanging promises on slow network or disconnected clients
  */
-function withTimeout<T>(promise: Promise<T>, ms = 6000, fallback: T): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 12000, fallback: T): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
@@ -32,7 +32,7 @@ export async function getClientServices(): Promise<Service[]> {
   if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'services');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    const snapshot = await withTimeout(getDocs(q), 12000, null);
     if (!snapshot || snapshot.empty) return [];
     
     const list: Service[] = [];
@@ -55,7 +55,7 @@ export async function getClientCategories(includeAll = false): Promise<ServiceCa
   if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'categories');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    const snapshot = await withTimeout(getDocs(q), 12000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: ServiceCategory[] = [];
@@ -80,7 +80,7 @@ export async function getClientBlogCategories(includeAll = false): Promise<BlogC
   if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'blogCategories');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    const snapshot = await withTimeout(getDocs(q), 12000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: BlogCategory[] = [];
@@ -105,7 +105,7 @@ export async function getClientBlogs(): Promise<Blog[]> {
   if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'blogs');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    const snapshot = await withTimeout(getDocs(q), 12000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: Blog[] = [];
@@ -128,7 +128,7 @@ export async function getClientReviews(): Promise<Review[]> {
   if (isNetworkOffline()) return [];
   try {
     const q = collection(db, 'reviews');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
+    const snapshot = await withTimeout(getDocs(q), 12000, null);
     if (!snapshot || snapshot.empty) return [];
 
     const list: Review[] = [];
