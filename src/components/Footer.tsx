@@ -40,7 +40,7 @@ export default function Footer({ setView }: FooterProps) {
   }, []);
   return (
     <footer className="bg-[#0F4C81] text-slate-200 font-sans border-t border-blue-900 mt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-14">
         
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           

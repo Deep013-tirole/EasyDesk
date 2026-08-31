@@ -173,12 +173,12 @@ export default function BlogsView({ blogs, blogCategories = [], updateBlogs }: B
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-12 sm:py-16 border-b border-slate-200/60">
         
         {/* Subtle Decorative Background Blur */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-80 h-80 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/2 -right-20 w-72 h-72 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10 space-y-8">
           <motion.div 
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -275,7 +275,7 @@ export default function BlogsView({ blogs, blogCategories = [], updateBlogs }: B
 
       {/* 2. DYNAMIC CATEGORY NAVIGATION BAR (STICKY, WITHOUT COUNTS) */}
       <section className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-16 z-30 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-3 flex flex-wrap items-center justify-between gap-3">
           {/* Category Pills Bar (No Numbers) */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0 flex-1">
             {categoryFilters.map((cat) => {
@@ -314,7 +314,7 @@ export default function BlogsView({ blogs, blogCategories = [], updateBlogs }: B
       </section>
 
       {/* 3. MAIN CONTENT CONTAINER */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+      <main className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-8 space-y-8">
         
         {/* Active Filter Indicator & Results Info */}
         <div className="flex items-center justify-between text-xs text-slate-500 font-medium">

@@ -44,7 +44,7 @@ export default function Header({
 
   return (
     <header id="easydesk-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] font-sans text-[#111827]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
         <div className="flex justify-between items-center h-16">
           
           {/* Logo Brand */}

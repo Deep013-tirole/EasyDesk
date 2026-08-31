@@ -409,7 +409,7 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
       
       {/* 1. TOP TRUST ANNOUNCEMENT BAR */}
       <div className="bg-[#0B2545] text-white py-2.5 px-4 border-b border-blue-900/40">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-slate-300">
             <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="font-semibold text-slate-200">EasyDesk Trust Center — ISO 27001 Certified Security & DPDP Compliance</span>
@@ -431,17 +431,17 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-14 sm:py-16 border-b border-slate-200/60 mb-10">
         
         {/* Subtle Decorative Background Blur */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-80 h-80 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/2 -right-20 w-72 h-72 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10">
           <motion.div 
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="max-w-4xl mx-auto text-center space-y-5"
+            className="max-w-4xl 2xl:max-w-5xl mx-auto text-center space-y-5"
           >
             <div className="inline-flex items-center gap-2 bg-blue-100/90 border border-blue-200/70 px-4 py-1.5 rounded-full text-xs font-black text-[#0F4C81] shadow-2xs pulse-badge">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -491,7 +491,7 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
       </section>
 
       {/* 3. MAIN CONTENT CONTAINER */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-14">
+      <div className="max-w-6xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 space-y-12 sm:space-y-14">
 
         {/* SECTION 2: INFORMATION EASYDESK MAY REQUEST */}
         {isMatch(data.mayRequest.title + data.mayRequest.items.map(i => i.name + i.examples).join(' ')) && (

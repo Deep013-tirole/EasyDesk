@@ -211,12 +211,12 @@ export default function HomeView({
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white pt-10 pb-16 lg:pb-20 border-b border-slate-200/60">
         
         {/* Subtle Decorative Background Blur Blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-96 h-96 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
             
             {/* Left Content Column */}
@@ -376,8 +376,8 @@ export default function HomeView({
       </section>
 
       {/* 2. TRUST SECTION (Matching AboutUs Elevated Badges) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-7 relative z-20">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 -mt-7 relative z-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 2xl:gap-5">
           {trustBadges.map((badge, idx) => {
             const Icon = badge.icon;
             return (
@@ -405,7 +405,7 @@ export default function HomeView({
       </section>
 
       {/* Live Statistics Bar (Matching AboutUs Metrics Atmosphere) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-14">
         <motion.div 
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -417,7 +417,7 @@ export default function HomeView({
           <div className="absolute -top-20 -right-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 2xl:gap-8 relative z-10">
             {stats.map((stat, idx) => (
               <motion.div 
                 key={idx} 
@@ -439,7 +439,7 @@ export default function HomeView({
       </section>
 
       {/* 3. SERVICES SECTION */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -462,7 +462,7 @@ export default function HomeView({
           </button>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 2xl:gap-7">
           {featuredServices.map((service, idx) => (
             <motion.div 
               key={service.id} 
@@ -536,13 +536,13 @@ export default function HomeView({
       </section>
 
       {/* 4. WHY CHOOSE EASYDESK (Matching AboutUs Core Value Cards) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.2 }}
           transition={{ duration: 0.45 }}
-          className="text-center max-w-2xl mx-auto mb-12"
+          className="text-center max-w-2xl 2xl:max-w-3xl mx-auto mb-12"
         >
           <span className="badge-soft-success px-3.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase inline-block shadow-2xs">Verified Standard</span>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mt-2 text-slate-900 tracking-tight">Why Choose EasyDesk</h2>
@@ -551,7 +551,7 @@ export default function HomeView({
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-3 gap-6 2xl:gap-8">
           {whyChooseFeatures.map((feat, idx) => {
             const Icon = feat.icon;
             return (
@@ -583,7 +583,7 @@ export default function HomeView({
       </section>
 
       {/* 5. SECURITY SECTION (Dedicated Premium Section with Dark Navy Background & Glassmorphism) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -610,7 +610,7 @@ export default function HomeView({
           </div>
 
           {/* Security Features Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 2xl:gap-6 relative z-10">
             {[
               {
                 icon: Lock,
@@ -699,7 +699,7 @@ export default function HomeView({
       </section>
 
       {/* 6. EASYDESK AI CHATBOT CARD (Interactive Glassmorphic Container) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -797,7 +797,7 @@ export default function HomeView({
       </section>
 
       {/* 7. CALENDAR & UPCOMING GOVERNMENT DEADLINES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -822,7 +822,7 @@ export default function HomeView({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 2xl:gap-6">
             {govtEvents.map((evt, eIdx) => (
               <motion.div 
                 key={eIdx} 
@@ -861,7 +861,7 @@ export default function HomeView({
       </section>
 
       {/* 8. VERIFIED REVIEWS (Matching AboutUs Testimonial Refinement) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -882,7 +882,7 @@ export default function HomeView({
           </button>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-3 gap-6 2xl:gap-8">
           {reviews.map((rev, idx) => (
             <motion.div 
               key={rev.id} 
@@ -927,7 +927,7 @@ export default function HomeView({
       </section>
 
       {/* 9. BLOGS & ARTICLES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -952,7 +952,7 @@ export default function HomeView({
           </button>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 2xl:gap-8">
           {blogs.slice(0, 3).map((blog, idx) => (
             <motion.div 
               key={blog.id} 
@@ -973,7 +973,7 @@ export default function HomeView({
       </section>
 
       {/* 10. SUPPORT FAQS ACCORDION */}
-      <section id="faq-section" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section id="faq-section" className="max-w-4xl 2xl:max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -1013,7 +1013,7 @@ export default function HomeView({
       </section>
 
       {/* 11. CONTACT & LOCATION CARD (Matching AboutUs Split Card Aesthetics) */}
-      <section id="contact-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+      <section id="contact-section" className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-20">
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}

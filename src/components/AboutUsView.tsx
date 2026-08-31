@@ -273,12 +273,12 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
           ========================================================================= */}
       <section className="relative py-12 lg:py-16 overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white border-b border-slate-200/60">
         {/* Subtle Decorative Background Blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden opacity-60">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] h-full pointer-events-none overflow-hidden opacity-60">
           <div className="absolute -top-24 -left-20 w-96 h-96 bg-blue-200/40 rounded-full blur-3xl" />
           <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl px-4 mx-auto relative z-10">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 relative z-10">
           <div className="max-w-4xl mx-auto text-center space-y-5">
             
             {/* Top Pill Badge */}
@@ -359,7 +359,7 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
       </section>
 
       {/* Main Content Body */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 space-y-20">
+      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-12 space-y-20">
 
         {/* =========================================================================
             2. VISION & MISSION CARDS (Bootstrap Cards with 3D Hover & Glow)
