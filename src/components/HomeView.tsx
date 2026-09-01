@@ -250,6 +250,9 @@ export default function HomeView({
                 <div className="flex-1 flex items-center gap-2.5 px-3">
                   <Search className="w-4 h-4 text-slate-400 shrink-0" />
                   <input
+                    id="hero-service-search"
+                    name="search"
+                    aria-label="Search services, certificates, and schemes"
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1087,8 +1090,10 @@ export default function HomeView({
               ) : (
                 <form onSubmit={(e) => { e.preventDefault(); setContactSubmitted(true); }} className="mt-6 space-y-4">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Your Name</label>
+                    <label htmlFor="home-contact-name" className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Your Name</label>
                     <input
+                      id="home-contact-name"
+                      name="name"
                       type="text"
                       required
                       value={contactForm.name}
@@ -1098,8 +1103,10 @@ export default function HomeView({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Email Address</label>
+                    <label htmlFor="home-contact-email" className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Email Address</label>
                     <input
+                      id="home-contact-email"
+                      name="email"
                       type="email"
                       required
                       value={contactForm.email}
@@ -1109,8 +1116,10 @@ export default function HomeView({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Message</label>
+                    <label htmlFor="home-contact-message" className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Message</label>
                     <textarea
+                      id="home-contact-message"
+                      name="message"
                       required
                       rows={3}
                       value={contactForm.message}

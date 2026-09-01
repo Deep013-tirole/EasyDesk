@@ -2812,8 +2812,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'service' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Service Title *</label>
+                    <label htmlFor="admin-modal-service-title" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Service Title *</label>
                     <input
+                      id="admin-modal-service-title"
+                      name="serviceTitle"
                       type="text"
                       required
                       value={formData.title}
@@ -2824,8 +2826,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Category *</label>
+                      <label htmlFor="admin-modal-service-category" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Category *</label>
                       <select
+                        id="admin-modal-service-category"
+                        name="categoryId"
                         value={formData.categoryId}
                         onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold text-xs"
@@ -2840,8 +2844,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                       </select>
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Estimated Processing Time</label>
+                      <label htmlFor="admin-modal-service-processing-time" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Estimated Processing Time</label>
                       <input
+                        id="admin-modal-service-processing-time"
+                        name="processingTime"
                         type="text"
                         value={formData.processingTime}
                         onChange={(e) => setFormData({ ...formData, processingTime: e.target.value })}
@@ -2851,8 +2857,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Description</label>
+                    <label htmlFor="admin-modal-service-description" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Description</label>
                     <textarea
+                      id="admin-modal-service-description"
+                      name="description"
                       rows={3}
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -2862,8 +2870,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Gov Fees (INR)</label>
+                      <label htmlFor="admin-modal-service-gov-fees" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Gov Fees (INR)</label>
                       <input
+                        id="admin-modal-service-gov-fees"
+                        name="govFees"
                         type="number"
                         value={formData.govFees}
                         onChange={(e) => setFormData({ ...formData, govFees: e.target.value })}
@@ -2871,8 +2881,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Advisory Charge (INR)</label>
+                      <label htmlFor="admin-modal-service-advisory-charge" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Advisory Charge (INR)</label>
                       <input
+                        id="admin-modal-service-advisory-charge"
+                        name="serviceCharge"
                         type="number"
                         value={formData.serviceCharge}
                         onChange={(e) => setFormData({ ...formData, serviceCharge: e.target.value })}
@@ -2881,8 +2893,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Required Documents (Comma Separated)</label>
+                    <label htmlFor="admin-modal-service-documents" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Required Documents (Comma Separated)</label>
                     <input
+                      id="admin-modal-service-documents"
+                      name="requiredDocuments"
                       type="text"
                       value={formData.requiredDocuments}
                       onChange={(e) => setFormData({ ...formData, requiredDocuments: e.target.value })}
@@ -2896,8 +2910,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'category' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Category Name *</label>
+                    <label htmlFor="admin-modal-category-name" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Category Name *</label>
                     <input
+                      id="admin-modal-category-name"
+                      name="categoryName"
                       type="text"
                       required
                       value={formData.name}
@@ -2907,8 +2923,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Lucide Icon Name</label>
+                      <label htmlFor="admin-modal-category-icon" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Lucide Icon Name</label>
                       <input
+                        id="admin-modal-category-icon"
+                        name="icon"
                         type="text"
                         value={formData.icon}
                         onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
@@ -2916,8 +2934,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Color Theme</label>
+                      <label htmlFor="admin-modal-category-color" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Color Theme</label>
                       <input
+                        id="admin-modal-category-color"
+                        name="color"
                         type="text"
                         value={formData.color}
                         onChange={(e) => setFormData({ ...formData, color: e.target.value })}
@@ -2931,8 +2951,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'blog' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Article Title *</label>
+                    <label htmlFor="admin-modal-blog-title" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Article Title *</label>
                     <input
+                      id="admin-modal-blog-title"
+                      name="blogTitle"
                       type="text"
                       required
                       value={formData.title}
@@ -2949,9 +2971,11 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Category *</label>
+                      <label htmlFor="admin-modal-blog-category" className="text-[9px] font-bold text-slate-500 uppercase block mb-1">Category *</label>
                       {blogCategories && blogCategories.length > 0 ? (
                         <select
+                          id="admin-modal-blog-category"
+                          name="blogCategory"
                           value={formData.categoryId}
                           onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                           className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold text-xs"
@@ -2967,6 +2991,8 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                         </select>
                       ) : (
                         <input
+                          id="admin-modal-blog-category"
+                          name="blogCategory"
                           type="text"
                           value={formData.categoryId}
                           onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
@@ -2977,8 +3003,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                       )}
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Tags (Comma split)</label>
+                      <label htmlFor="admin-modal-blog-tags" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Tags (Comma split)</label>
                       <input
+                        id="admin-modal-blog-tags"
+                        name="tags"
                         type="text"
                         value={formData.tags}
                         onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
@@ -2988,8 +3016,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Content Body</label>
+                    <label htmlFor="admin-modal-blog-content" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Content Body</label>
                     <textarea
+                      id="admin-modal-blog-content"
+                      name="content"
                       rows={4}
                       value={formData.content}
                       onChange={(e) => setFormData({ ...formData, content: e.target.value })}
@@ -3002,8 +3032,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'faq' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">User Question *</label>
+                    <label htmlFor="admin-modal-faq-question" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">User Question *</label>
                     <input
+                      id="admin-modal-faq-question"
+                      name="question"
                       type="text"
                       required
                       value={formData.question}
@@ -3012,8 +3044,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Immediate Answer *</label>
+                    <label htmlFor="admin-modal-faq-answer" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Immediate Answer *</label>
                     <textarea
+                      id="admin-modal-faq-answer"
+                      name="answer"
                       rows={3}
                       required
                       value={formData.answer}
@@ -3027,8 +3061,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'banner' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Banner Slide Title *</label>
+                    <label htmlFor="admin-modal-banner-title" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Banner Slide Title *</label>
                     <input
+                      id="admin-modal-banner-title"
+                      name="bannerTitle"
                       type="text"
                       required
                       value={formData.title}
@@ -3037,8 +3073,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Image URL Address *</label>
+                    <label htmlFor="admin-modal-banner-image-url" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Image URL Address *</label>
                     <input
+                      id="admin-modal-banner-image-url"
+                      name="imageUrl"
                       type="text"
                       required
                       value={formData.imageUrl}
@@ -3052,8 +3090,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               {formType === 'page' && (
                 <>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Page Document Title *</label>
+                    <label htmlFor="admin-modal-page-title" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Page Document Title *</label>
                     <input
+                      id="admin-modal-page-title"
+                      name="pageTitle"
                       type="text"
                       required
                       value={formData.title}
@@ -3062,8 +3102,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Page Content Markdown Text</label>
+                    <label htmlFor="admin-modal-page-content" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Page Content Markdown Text</label>
                     <textarea
+                      id="admin-modal-page-content"
+                      name="pageContent"
                       rows={5}
                       required
                       value={formData.content}
@@ -3078,8 +3120,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Full Profile Name *</label>
+                      <label htmlFor="admin-modal-user-name" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Full Profile Name *</label>
                       <input
+                        id="admin-modal-user-name"
+                        name="userName"
                         type="text"
                         required
                         value={formData.name}
@@ -3088,8 +3132,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Contact Mobile</label>
+                      <label htmlFor="admin-modal-user-mobile" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Contact Mobile</label>
                       <input
+                        id="admin-modal-user-mobile"
+                        name="userMobile"
                         type="text"
                         value={formData.mobile}
                         onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
@@ -3098,8 +3144,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Login Email *</label>
+                    <label htmlFor="admin-modal-user-email" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Login Email *</label>
                     <input
+                      id="admin-modal-user-email"
+                      name="userEmail"
                       type="email"
                       required
                       value={formData.email}
@@ -3109,8 +3157,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Account Role</label>
+                      <label htmlFor="admin-modal-user-role" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Account Role</label>
                       <select
+                        id="admin-modal-user-role"
+                        name="userRole"
                         value={formData.role}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold"
@@ -3124,8 +3174,10 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
               )}
 
               <div>
-                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Status Setting</label>
+                <label htmlFor="admin-modal-status-setting" className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Status Setting</label>
                 <select
+                  id="admin-modal-status-setting"
+                  name="statusSetting"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold"

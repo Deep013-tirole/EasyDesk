@@ -322,12 +322,14 @@ export default function ReviewSubmissionForm({
         {/* Row 1: Customer ID & Customer Name */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label htmlFor="review-customer-id" className="block text-xs font-bold text-slate-700 mb-1.5">
               Customer ID <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
+                id="review-customer-id"
+                name="customerId"
                 type="text"
                 required
                 value={customerId}
@@ -340,10 +342,12 @@ export default function ReviewSubmissionForm({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label htmlFor="review-customer-name" className="block text-xs font-bold text-slate-700 mb-1.5">
               Customer Name <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <input
+              id="review-customer-name"
+              name="customerName"
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
@@ -357,12 +361,14 @@ export default function ReviewSubmissionForm({
         {/* Row 2: Order ID & Service ID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label htmlFor="review-order-id" className="block text-xs font-bold text-slate-700 mb-1.5">
               Order ID <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Package className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
+                id="review-order-id"
+                name="orderId"
                 type="text"
                 required
                 value={orderId}
@@ -375,12 +381,14 @@ export default function ReviewSubmissionForm({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label htmlFor="review-service-select" className="block text-xs font-bold text-slate-700 mb-1.5">
               Service ID & Name <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <select
+                id="review-service-select"
+                name="serviceId"
                 value={serviceId}
                 onChange={(e) => setServiceId(e.target.value)}
                 className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0F4C81] focus:ring-2 focus:ring-blue-100 rounded-xl text-xs text-slate-900 font-medium transition cursor-pointer appearance-none"
@@ -440,10 +448,12 @@ export default function ReviewSubmissionForm({
 
         {/* Row 4: Review Text */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          <label htmlFor="review-feedback-content" className="block text-xs font-bold text-slate-700 mb-1.5">
             Review Feedback & Comments <span className="text-red-500">*</span>
           </label>
           <textarea
+            id="review-feedback-content"
+            name="feedback"
             required
             rows={4}
             value={reviewText}

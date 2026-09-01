@@ -206,8 +206,10 @@ export default function TrackingView() {
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mb-8 print:hidden">
         <form onSubmit={handleTrack} className="grid sm:grid-cols-3 gap-4 items-end">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Order ID *</label>
+            <label htmlFor="track-order-id" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Order ID *</label>
             <input
+              id="track-order-id"
+              name="orderId"
               type="text"
               required
               placeholder="e.g. ORD-10021"
@@ -218,8 +220,10 @@ export default function TrackingView() {
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mobile Number (Optional)</label>
+            <label htmlFor="track-mobile-number" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mobile Number (Optional)</label>
             <input
+              id="track-mobile-number"
+              name="mobile"
               type="tel"
               placeholder="10-digit mobile number"
               value={mobile}
@@ -468,10 +472,12 @@ export default function TrackingView() {
 
                   {/* Feedback Text Area */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    <label htmlFor="tracking-review-feedback" className="block text-xs font-bold text-slate-700 mb-1.5">
                       Write Review / Feedback *
                     </label>
                     <textarea
+                      id="tracking-review-feedback"
+                      name="feedback"
                       required
                       rows={3}
                       value={reviewText}

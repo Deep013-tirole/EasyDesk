@@ -940,8 +940,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
             ) : (
               <form onSubmit={handleReportScam} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Name *</label>
+                  <label htmlFor="scam-reporter-name" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Name *</label>
                   <input 
+                    id="scam-reporter-name"
+                    name="scamName"
                     type="text" 
                     required 
                     value={scamName} 
@@ -953,8 +955,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Email *</label>
+                    <label htmlFor="scam-reporter-email" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Email *</label>
                     <input 
+                      id="scam-reporter-email"
+                      name="scamEmail"
                       type="email" 
                       required 
                       value={scamEmail} 
@@ -964,8 +968,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Phone</label>
+                    <label htmlFor="scam-reporter-phone" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Your Phone</label>
                     <input 
+                      id="scam-reporter-phone"
+                      name="scamPhone"
                       type="text" 
                       value={scamPhone} 
                       onChange={e => setScamPhone(e.target.value)}
@@ -977,8 +983,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Caller Phone / Email ID *</label>
+                    <label htmlFor="scam-impersonator-contact" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Caller Phone / Email ID *</label>
                     <input 
+                      id="scam-impersonator-contact"
+                      name="scamImpersonator"
                       type="text" 
                       required
                       value={scamImpersonator} 
@@ -988,8 +996,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Channel Used</label>
+                    <label htmlFor="scam-channel-select" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Channel Used</label>
                     <select 
+                      id="scam-channel-select"
+                      name="scamChannel"
                       value={scamChannel} 
                       onChange={e => setScamChannel(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white input-focus-glow outline-none font-medium"
@@ -1004,8 +1014,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">What did they ask for? *</label>
+                  <label htmlFor="scam-details-textarea" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">What did they ask for? *</label>
                   <textarea 
+                    id="scam-details-textarea"
+                    name="scamDetails"
                     rows={3} 
                     required
                     value={scamDetails} 
@@ -1059,8 +1071,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
             ) : (
               <form onSubmit={handleRequestDeletion} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Customer Name *</label>
+                  <label htmlFor="del-cust-name" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Customer Name *</label>
                   <input 
+                    id="del-cust-name"
+                    name="delName"
                     type="text" 
                     required 
                     value={delName} 
@@ -1072,8 +1086,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Email Address *</label>
+                    <label htmlFor="del-cust-email" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Email Address *</label>
                     <input 
+                      id="del-cust-email"
+                      name="delEmail"
                       type="email" 
                       required 
                       value={delEmail} 
@@ -1083,8 +1099,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Mobile Number</label>
+                    <label htmlFor="del-cust-phone" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Mobile Number</label>
                     <input 
+                      id="del-cust-phone"
+                      name="delPhone"
                       type="text" 
                       value={delPhone} 
                       onChange={e => setDelPhone(e.target.value)}
@@ -1095,8 +1113,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Order ID (Optional)</label>
+                  <label htmlFor="del-order-id" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Order ID (Optional)</label>
                   <input 
+                    id="del-order-id"
+                    name="delOrderId"
                     type="text" 
                     value={delOrderId} 
                     onChange={e => setDelOrderId(e.target.value)}
@@ -1106,8 +1126,10 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Reason for Purge Request</label>
+                  <label htmlFor="del-purge-reason" className="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Reason for Purge Request</label>
                   <textarea 
+                    id="del-purge-reason"
+                    name="delReason"
                     rows={2} 
                     value={delReason} 
                     onChange={e => setDelReason(e.target.value)}

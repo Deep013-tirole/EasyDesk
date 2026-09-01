@@ -422,8 +422,10 @@ export default function PaymentView({
 
               <form onSubmit={handleSubmitProof} className="space-y-4 text-xs">
                 <div>
-                  <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">EasyDesk Order ID *</label>
+                  <label htmlFor="payment-order-id" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">EasyDesk Order ID *</label>
                   <input
+                    id="payment-order-id"
+                    name="orderId"
                     type="text"
                     required
                     value={orderId}
@@ -435,8 +437,10 @@ export default function PaymentView({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">12-Digit UTR / Transaction Reference ID *</label>
+                  <label htmlFor="payment-utr-number" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">12-Digit UTR / Transaction Reference ID *</label>
                   <input
+                    id="payment-utr-number"
+                    name="utr"
                     type="text"
                     required
                     value={utr}
@@ -448,8 +452,10 @@ export default function PaymentView({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Payment Date *</label>
+                    <label htmlFor="payment-date-input" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Payment Date *</label>
                     <input
+                      id="payment-date-input"
+                      name="paymentDate"
                       type="date"
                       required
                       value={paymentDate}
@@ -459,8 +465,10 @@ export default function PaymentView({
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Payment Screenshot URL (Optional)</label>
+                    <label htmlFor="payment-screenshot-url" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Payment Screenshot URL (Optional)</label>
                     <input
+                      id="payment-screenshot-url"
+                      name="screenshotUrl"
                       type="text"
                       value={screenshotUrl}
                       onChange={(e) => setScreenshotUrl(e.target.value)}

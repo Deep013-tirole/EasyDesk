@@ -145,12 +145,14 @@ export default function AuthPortal({
 
             <form onSubmit={handleAdminLogin} className="space-y-4 mt-6">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
+                <label htmlFor="auth-email-input" className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
                   Login ID / Email
                 </label>
                 <div className="relative group">
                   <Mail className="w-4 h-4 text-slate-400 group-focus-within:text-[#0F4C81] absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200" />
                   <input 
+                    id="auth-email-input"
+                    name="email"
                     type="text"
                     required
                     value={email}
@@ -162,12 +164,14 @@ export default function AuthPortal({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
+                <label htmlFor="auth-password-input" className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
                   Password
                 </label>
                 <div className="relative group">
                   <Lock className="w-4 h-4 text-slate-400 group-focus-within:text-[#0F4C81] absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200" />
                   <input 
+                    id="auth-password-input"
+                    name="password"
                     type="password"
                     required
                     value={password}

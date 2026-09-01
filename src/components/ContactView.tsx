@@ -359,8 +359,10 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
               <form onSubmit={handleSubmit} className="space-y-4 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Your Full Name *</label>
+                    <label htmlFor="contact-full-name" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Your Full Name *</label>
                     <input
+                      id="contact-full-name"
+                      name="name"
                       type="text"
                       required
                       value={name}
@@ -371,8 +373,10 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Email Address *</label>
+                    <label htmlFor="contact-email-addr" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Email Address *</label>
                     <input
+                      id="contact-email-addr"
+                      name="email"
                       type="email"
                       required
                       value={email}
@@ -385,8 +389,10 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Mobile Number *</label>
+                    <label htmlFor="contact-mobile-num" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Mobile Number *</label>
                     <input
+                      id="contact-mobile-num"
+                      name="phone"
                       type="tel"
                       required
                       value={phone}
@@ -397,8 +403,10 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Subject / Service Topic *</label>
+                    <label htmlFor="contact-subject-topic" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Subject / Service Topic *</label>
                     <input
+                      id="contact-subject-topic"
+                      name="subject"
                       type="text"
                       required
                       value={subject}
@@ -410,8 +418,10 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Your Message / Inquiry Details *</label>
+                  <label htmlFor="contact-inquiry-message" className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1.5">Your Message / Inquiry Details *</label>
                   <textarea
+                    id="contact-inquiry-message"
+                    name="message"
                     rows={4}
                     required
                     value={message}
