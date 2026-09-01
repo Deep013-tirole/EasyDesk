@@ -174,7 +174,7 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
   }
 
   return (
-    <div id="easydesk-contact-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-20">
+    <div id="easydesk-contact-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-20 w-full max-w-full overflow-x-hidden">
       
       {/* 1. HERO HEADER (Matching AboutUs Gradient Banner & Pulse Badge) */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-12 sm:py-16 border-b border-slate-200/60 mb-10">

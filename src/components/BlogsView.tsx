@@ -167,7 +167,7 @@ export default function BlogsView({ blogs, blogCategories = [], updateBlogs }: B
   // MAIN BLOGS & KNOWLEDGE HUB DIRECTORY
   // -----------------------------------------------------------------
   return (
-    <div id="easydesk-blogs-view" className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
+    <div id="easydesk-blogs-view" className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900 w-full max-w-full overflow-x-hidden">
       
       {/* 1. HERO SECTION (Matching AboutUs Gradient Banner & Micro Metrics) */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-12 sm:py-16 border-b border-slate-200/60">

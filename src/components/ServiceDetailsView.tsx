@@ -147,46 +147,46 @@ export default function ServiceDetailsView({
   ];
 
   return (
-    <div id="easydesk-service-details-page" className="min-h-screen bg-slate-50/60 font-sans text-slate-900 pb-20">
+    <div id="easydesk-service-details-page" className="w-full max-w-full overflow-x-hidden min-h-screen bg-slate-50/60 font-sans text-slate-900 pb-20">
       
       {/* 1. BREADCRUMBS BAR */}
-      <div className="bg-white border-b border-slate-200/80 sticky top-16 z-30 shadow-xs">
+      <div className="bg-white border-b border-slate-200/80 sticky top-16 z-30 shadow-xs w-full max-w-full">
         <div className="portal-container py-3">
-          <div className="flex items-center justify-between gap-4 text-xs font-medium">
-            <nav className="flex items-center gap-1.5 text-slate-500 overflow-x-auto whitespace-nowrap scrollbar-none">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 text-xs font-medium min-w-0">
+            <nav className="flex items-center gap-1.5 text-slate-500 overflow-x-auto whitespace-nowrap scrollbar-none min-w-0 flex-1 py-0.5">
               <button 
                 onClick={() => setView('home')} 
-                className="hover:text-[#0F4C81] transition cursor-pointer"
+                className="hover:text-[#0F4C81] transition cursor-pointer shrink-0"
               >
                 Home
               </button>
-              <span className="text-slate-300">/</span>
+              <span className="text-slate-300 shrink-0">/</span>
               <button 
                 onClick={() => {
                   setSelectedServiceId(null);
                   setView('services');
                 }} 
-                className="hover:text-[#0F4C81] transition cursor-pointer"
+                className="hover:text-[#0F4C81] transition cursor-pointer shrink-0"
               >
                 Services
               </button>
-              <span className="text-slate-300">/</span>
+              <span className="text-slate-300 shrink-0">/</span>
               <button 
                 onClick={() => {
                   setSelectedServiceId(null);
                   setView('services');
                 }} 
-                className="hover:text-[#0F4C81] transition cursor-pointer"
+                className="hover:text-[#0F4C81] transition cursor-pointer shrink-0"
               >
                 {categoryName}
               </button>
-              <span className="text-slate-300">/</span>
-              <span className="font-bold text-slate-900 truncate max-w-[200px] sm:max-w-md">
+              <span className="text-slate-300 shrink-0">/</span>
+              <span className="font-bold text-slate-900 truncate max-w-[120px] sm:max-w-[200px] md:max-w-md">
                 {service.title}
               </span>
             </nav>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 onClick={handleCopyLink}
                 className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition cursor-pointer"
@@ -200,9 +200,9 @@ export default function ServiceDetailsView({
                   setSelectedServiceId(null);
                   setView('services');
                 }}
-                className="flex items-center gap-1 text-[11px] font-bold text-[#0F4C81] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                className="flex items-center gap-1 text-[11px] font-bold text-[#0F4C81] hover:bg-blue-50 px-2 sm:px-2.5 py-1.5 rounded-lg transition cursor-pointer whitespace-nowrap"
               >
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Catalog
+                <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Back to Catalog</span><span className="xs:hidden">Back</span>
               </button>
             </div>
           </div>
@@ -210,16 +210,16 @@ export default function ServiceDetailsView({
       </div>
 
       {/* 2. SERVICE HERO SECTION */}
-      <section className="bg-white border-b border-slate-200/80 pt-8 pb-10">
+      <section className="bg-white border-b border-slate-200/80 pt-6 sm:pt-8 pb-8 sm:pb-10 w-full max-w-full">
         <div className="portal-container">
-          <div className="grid lg:grid-cols-12 gap-8 items-start">
+          <div className="grid lg:grid-cols-12 gap-6 sm:gap-8 items-start w-full min-w-0">
             
             {/* Left Hero Content */}
-            <div className="lg:col-span-8 space-y-4">
+            <div className="lg:col-span-8 space-y-4 min-w-0 w-full">
               
               {/* Category & Badge Info Row */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-extrabold tracking-wider uppercase bg-blue-50 text-[#0F4C81] border border-blue-100 px-3 py-1 rounded-full shadow-2xs">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="text-[10px] font-extrabold tracking-wider uppercase bg-blue-50 text-[#0F4C81] border border-blue-100 px-2.5 sm:px-3 py-1 rounded-full shadow-2xs">
                   {categoryName}
                 </span>
                 <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -236,7 +236,7 @@ export default function ServiceDetailsView({
               </div>
 
               {/* Service Title */}
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-tight break-words">
                 {service.title}
               </h1>
 
@@ -246,16 +246,16 @@ export default function ServiceDetailsView({
               </p>
 
               {/* Quick Hero Value Chips */}
-              <div className="pt-2 flex flex-wrap gap-2.5 text-[11px] font-medium text-slate-700">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+              <div className="pt-2 flex flex-wrap gap-2 text-[11px] font-medium text-slate-700">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2.5 sm:px-3 py-1.5 rounded-xl">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#0F4C81]" />
                   <span>100% Verified Filing</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2.5 sm:px-3 py-1.5 rounded-xl">
                   <Award className="w-3.5 h-3.5 text-[#10B981]" />
                   <span>Transparent Government Fees</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2.5 sm:px-3 py-1.5 rounded-xl">
                   <Zap className="w-3.5 h-3.5 text-amber-600" />
                   <span>Fast WhatsApp Updates</span>
                 </div>
@@ -264,8 +264,8 @@ export default function ServiceDetailsView({
             </div>
 
             {/* Right Hero Image / Illustration Card */}
-            <div className="lg:col-span-4">
-              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 shadow-xs overflow-hidden">
+            <div className="lg:col-span-4 min-w-0 w-full">
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 shadow-xs overflow-hidden w-full">
                 {service.image || service.imageUrl || service.bannerImage ? (
                   <div className="relative rounded-xl overflow-hidden aspect-16/10 bg-slate-100 border border-slate-200/60">
                     <img 
@@ -319,14 +319,14 @@ export default function ServiceDetailsView({
       </section>
 
       {/* 3. MAIN SECTION WITH TWO-COLUMN CONTENT + STICKY SIDEBAR */}
-      <div className="portal-container pt-8">
-        <div className="grid lg:grid-cols-12 gap-8 items-start">
+      <div className="portal-container pt-6 sm:pt-8 w-full max-w-full">
+        <div className="grid lg:grid-cols-12 gap-6 sm:gap-8 items-start w-full min-w-0">
           
           {/* LEFT COLUMN: NAVIGATION + CONTENT MODULES */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-5 sm:space-y-6 min-w-0 w-full">
             
             {/* HORIZONTAL SECTION TABS NAVIGATION */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-xs sticky top-28 z-20 overflow-x-auto scrollbar-none">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-xs sticky top-28 z-20 overflow-x-auto scrollbar-none w-full max-w-full">
               <div className="flex items-center gap-1 min-w-max">
                 {availableTabs.map(tab => (
                   <button
@@ -340,7 +340,7 @@ export default function ServiceDetailsView({
                         window.scrollTo({ top: y, behavior: 'smooth' });
                       }
                     }}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                    className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       activeNavTab === tab.id
                         ? 'bg-[#0F4C81] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -353,7 +353,7 @@ export default function ServiceDetailsView({
             </div>
 
             {/* SECTION 1: OVERVIEW */}
-            <div id="section-overview" className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-7 shadow-xs space-y-4">
+            <div id="section-overview" className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-7 shadow-xs space-y-4 w-full min-w-0">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <FileText className="w-4 h-4 text-[#0F4C81]" />
                 <h2 className="text-sm sm:text-base font-bold text-slate-900">Service Overview & Scope</h2>
@@ -587,10 +587,10 @@ export default function ServiceDetailsView({
           </div>
 
           {/* RIGHT COLUMN: STICKY SERVICE ACTION CARD */}
-          <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-28">
+          <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-28 min-w-0 w-full">
             
             {/* Primary Action Card */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-5">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 w-full min-w-0">
               
               {/* Pricing Header */}
               <div>
@@ -598,7 +598,7 @@ export default function ServiceDetailsView({
                   All-Inclusive Service Fee
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black text-slate-900">₹{totalFee}</span>
+                  <span className="text-2xl sm:text-3xl font-black text-slate-900">₹{totalFee}</span>
                   <span className="text-xs text-slate-400">Total payable</span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -655,7 +655,7 @@ export default function ServiceDetailsView({
             </div>
 
             {/* Service Highlights Card */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-3 w-full min-w-0">
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Award className="w-3.5 h-3.5 text-[#0F4C81]" />
                 <span>Service Guarantee</span>
@@ -677,7 +677,7 @@ export default function ServiceDetailsView({
             </div>
 
             {/* Helpline Assistance Box */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-600 flex items-center justify-between gap-3">
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-600 flex items-center justify-between gap-3 w-full min-w-0">
               <div>
                 <span className="font-bold text-slate-800 block">Need custom help?</span>
                 <span className="text-[10px] text-slate-500">Talk to our lead desk coordinator</span>
@@ -696,10 +696,10 @@ export default function ServiceDetailsView({
       </div>
 
       {/* 4. RELATED SERVICES SECTION */}
-      <section className="portal-container pt-16">
-        <div className="flex items-center justify-between mb-6">
+      <section className="portal-container pt-12 sm:pt-16 w-full max-w-full">
+        <div className="flex items-center justify-between mb-6 gap-2">
           <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900">Related Services in {categoryName}</h2>
+            <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900">Related Services in {categoryName}</h2>
             <p className="text-xs text-slate-500 mt-0.5">Explore popular document assistance options in this category</p>
           </div>
           <button
@@ -707,14 +707,14 @@ export default function ServiceDetailsView({
               setSelectedServiceId(null);
               setView('services');
             }}
-            className="text-xs font-bold text-[#0F4C81] hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-[#0F4C81] hover:underline flex items-center gap-1 cursor-pointer shrink-0"
           >
             <span>View All</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
           {relatedServices.map(rel => {
             const relPrice = (rel.govFees || 0) + (rel.serviceCharge || 0);
             return (

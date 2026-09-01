@@ -39,10 +39,10 @@ export default function Footer({ setView }: FooterProps) {
     return () => unsubscribe();
   }, []);
   return (
-    <footer className="bg-[#0F4C81] text-slate-200 font-sans border-t border-blue-900 mt-16">
-      <div className="portal-container py-14">
+    <footer className="bg-[#0F4C81] text-slate-200 font-sans border-t border-blue-900 mt-16 w-full max-w-full">
+      <div className="portal-container py-10 sm:py-14 w-full max-w-full">
         
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 w-full min-w-0">
           
           {/* Brand Info */}
           <div className="md:col-span-2 space-y-4">

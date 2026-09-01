@@ -205,7 +205,7 @@ export default function HomeView({
   const faqs = faqsList;
 
   return (
-    <div id="easydesk-home-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-16 overflow-hidden">
+    <div id="easydesk-home-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-16 w-full max-w-full overflow-x-hidden">
       
       {/* 1. HERO SECTION (Matching AboutUsView Gradient, Pulse Badge & Motion Entrance) */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white pt-10 pb-16 lg:pb-20 border-b border-slate-200/60">

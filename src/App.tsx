@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import { Helmet } from 'react-helmet-async';
 import Header from './components/Header.js';
 import HomeView from './components/HomeView.js';
 import ServicesView from './components/ServicesView.js';
@@ -277,12 +278,154 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Dynamic SEO & Document Metadata resolution
+  const activeService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
+  
+  const seoConfig = React.useMemo(() => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://easydesk.portal';
+    
+    if (view === 'service-details' && activeService) {
+      const catName = categories.find(c => c.id === activeService.categoryId)?.name || 'Government & Citizen Services';
+      const title = activeService.seoTitle || `${activeService.title} - Apply Online & Track Status | EasyDesk`;
+      const desc = activeService.seoDescription || activeService.shortDescription || activeService.description || `Apply online for ${activeService.title} with verified desk assistance, full document verification, transparent government fees, and real-time status updates on WhatsApp.`;
+      const url = `${origin}/services/${activeService.id}`;
+      return {
+        title,
+        description: desc,
+        keywords: `${activeService.title}, ${catName}, apply online, online application, government fees, document checklist, track status, EasyDesk`,
+        url,
+        type: 'article',
+        robots: 'index, follow'
+      };
+    }
+
+    switch (view) {
+      case 'services':
+        return {
+          title: 'All Digital & Government Services Catalog | EasyDesk',
+          description: 'Browse all official government, educational, utility, and citizen documentation services. Verified submissions with zero rejection guarantee.',
+          keywords: 'government services list, pan card, certificates, online voter card, utility bills, business registration, digital seva',
+          url: `${origin}/services`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'blogs':
+        return {
+          title: 'Knowledge Hub, Guides & Government Updates | EasyDesk Blog',
+          description: 'Explore step-by-step documentation guides, eligibility requirements, government notification circulars, and digital assistance tips.',
+          keywords: 'easydesk blogs, government portal guides, pan card rules, voter id online application, documentation assistance',
+          url: `${origin}/blogs`,
+          type: 'blog',
+          robots: 'index, follow'
+        };
+      case 'track':
+        return {
+          title: 'Track Application Status in Real-Time | EasyDesk',
+          description: 'Check the real-time processing status of your government and digital service applications using your Application ID or Phone Number.',
+          keywords: 'track application, application status check, pan card status, track government file, easydesk tracker',
+          url: `${origin}/track`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'about':
+        return {
+          title: 'About Us - Trusted Citizen Service Portal | EasyDesk',
+          description: 'EasyDesk simplifies government and digital citizen services across India with transparent processing, dedicated desk coordinators, and AI document checking.',
+          keywords: 'about easydesk, digital seva portal, citizen assistance platform, certified digital desk',
+          url: `${origin}/about`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'contact':
+        return {
+          title: 'Contact Support & Help Desk Officers | EasyDesk',
+          description: 'Need help with your application? Get in touch with our desk support officers via WhatsApp, phone, email, or instant online ticketing.',
+          keywords: 'contact easydesk, customer support, digital seva helpdesk, whatsapp assistance',
+          url: `${origin}/contact`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'privacy-security':
+        return {
+          title: 'Privacy Policy & Data Protection Guarantee | EasyDesk',
+          description: 'Learn how EasyDesk safeguards citizen records with 256-bit AES encryption, strictly zero third-party data selling, and secure document vaults.',
+          keywords: 'privacy policy, data security, document safety, citizen data protection',
+          url: `${origin}/privacy-security`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'payment':
+        return {
+          title: 'Secure Payment Portal | EasyDesk',
+          description: 'Make secure, instant payments for your digital service filings via UPI, Net Banking, and Debit/Credit cards with official tax invoices.',
+          keywords: 'easydesk payment, secure upi payment, government fees payment',
+          url: `${origin}/payment`,
+          type: 'website',
+          robots: 'noindex, follow'
+        };
+      case 'submit-review':
+      case 'review':
+        return {
+          title: 'Submit Customer Feedback & Review | EasyDesk',
+          description: 'Share your service experience and rating to help us continually enhance EasyDesk citizen support.',
+          keywords: 'easydesk reviews, rate service, customer feedback',
+          url: `${origin}/submit-review`,
+          type: 'website',
+          robots: 'index, follow'
+        };
+      case 'admin':
+      case 'admin-login':
+        return {
+          title: 'Officer & Administrative Portal | EasyDesk',
+          description: 'EasyDesk secure administration desk for authorized operators and service coordinators.',
+          keywords: 'easydesk admin, officer login',
+          url: `${origin}/admin`,
+          type: 'website',
+          robots: 'noindex, nofollow'
+        };
+      case 'home':
+      default:
+        return {
+          title: 'EasyDesk | Premium Digital Services Portal',
+          description: 'Apply online for Government, Educational, Utility, and Business documents with verified assistance, real-time WhatsApp updates, and zero processing rejections.',
+          keywords: 'easydesk, digital seva, government services, pan card, certificates, online application, digital service portal',
+          url: origin,
+          type: 'website',
+          robots: 'index, follow'
+        };
+    }
+  }, [view, activeService]);
+
   return (
     <LanguageProvider>
-      <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans select-none antialiased">
+      <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50/50 flex flex-col font-sans select-none antialiased">
+        
+        {/* Dynamic SEO Meta Tags via React Helmet */}
+        <Helmet>
+          <title>{seoConfig.title}</title>
+          <meta name="description" content={seoConfig.description} />
+          <meta name="keywords" content={seoConfig.keywords} />
+          <meta name="robots" content={seoConfig.robots} />
+          
+          {/* Open Graph / Facebook */}
+          <meta property="og:type" content={seoConfig.type} />
+          <meta property="og:url" content={seoConfig.url} />
+          <meta property="og:title" content={seoConfig.title} />
+          <meta property="og:description" content={seoConfig.description} />
+          <meta property="og:site_name" content="EasyDesk" />
+          
+          {/* Twitter Meta */}
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:url" content={seoConfig.url} />
+          <meta name="twitter:title" content={seoConfig.title} />
+          <meta name="twitter:description" content={seoConfig.description} />
+
+          {/* Canonical Link */}
+          <link rel="canonical" href={seoConfig.url} />
+        </Helmet>
         
         {!isOnline && (
-          <div className="bg-amber-600 text-white text-[11px] font-semibold py-1.5 px-4 flex items-center justify-center gap-2 shadow-xs z-50 animate-in fade-in">
+          <div className="bg-amber-600 text-white text-[11px] font-semibold py-1.5 px-4 flex items-center justify-center gap-2 shadow-xs z-50 animate-in fade-in w-full">
             <WifiOff className="w-3.5 h-3.5" />
             <span>You are currently offline. Displaying cached data. Reconnecting automatically when internet is available...</span>
           </div>
@@ -297,7 +440,7 @@ export default function App() {
           allUsers={[]}
         />
 
-        <main className="flex-1">
+        <main className="flex-1 w-full max-w-full min-w-0">
           {loading ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-xs text-slate-400 font-sans">
               <div className="w-8 h-8 border-4 border-[#0F4C81] border-t-transparent rounded-full animate-spin" />

@@ -55,7 +55,7 @@ export default function ServicesView({
   }, [categories]);
 
   return (
-    <div id="easydesk-services-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-16">
+    <div id="easydesk-services-view" className="font-sans text-slate-900 bg-[#F8FAFC] pb-16 w-full max-w-full overflow-x-hidden">
       
       {/* 1. HERO HEADER (Matching AboutUs Gradient Banner & Pulse Badge) */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-slate-50 to-white py-10 sm:py-14 border-b border-slate-200/60 mb-8">

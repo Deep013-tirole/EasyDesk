@@ -405,7 +405,7 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
   };
 
   return (
-    <div id="easydesk-privacy-view" className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 pb-20">
+    <div id="easydesk-privacy-view" className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 pb-20 w-full max-w-full overflow-x-hidden">
       
       {/* 1. TOP TRUST ANNOUNCEMENT BAR */}
       <div className="bg-[#0B2545] text-white py-2.5 px-4 border-b border-blue-900/40">

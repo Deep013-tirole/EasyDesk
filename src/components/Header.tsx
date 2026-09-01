@@ -43,9 +43,9 @@ export default function Header({
   };
 
   return (
-    <header id="easydesk-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] font-sans text-[#111827]">
-      <div className="portal-container">
-        <div className="flex justify-between items-center h-16">
+    <header id="easydesk-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] font-sans text-[#111827] w-full max-w-full">
+      <div className="portal-container w-full max-w-full">
+        <div className="flex justify-between items-center h-16 w-full min-w-0">
           
           {/* Logo Brand */}
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>

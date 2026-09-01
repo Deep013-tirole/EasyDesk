@@ -266,7 +266,7 @@ export default function AboutUsView({ setView }: { setView: (v: string) => void 
   };
 
   return (
-    <div className="font-sans pb-12 text-slate-900 overflow-hidden">
+    <div className="font-sans pb-12 text-slate-900 w-full max-w-full overflow-x-hidden">
       
       {/* =========================================================================
           1. HERO HEADER SECTION (Bootstrap Jumbotron + Motion Animation)

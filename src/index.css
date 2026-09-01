@@ -33,10 +33,36 @@
   --theme-header-bg: rgba(31, 41, 55, 0.85);
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
   background-color: var(--theme-bg-app);
   color: var(--theme-text-main);
   transition: background-color 0.2s ease, color 0.2s ease;
+  position: relative;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-height: 100vh;
 }
 
 /* Global Inversion Rules for Dark Gray Palette */
@@ -426,12 +452,23 @@ a:hover {
 /* Google Translate Widget & Tooltip Suppression for Clean UI */
 .goog-te-banner-frame,
 .goog-te-balloon-frame,
+.goog-te-menu-frame,
 #goog-gt-tt,
 .goog-te-spinner-pos,
 .goog-tooltip,
-.goog-tooltip:hover {
+.goog-tooltip:hover,
+iframe.skiptranslate,
+iframe.goog-te-banner-frame {
   display: none !important;
   visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  pointer-events: none !important;
 }
 
 body {
@@ -459,19 +496,20 @@ font {
   max-width: 1720px;
   margin-left: auto;
   margin-right: auto;
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  box-sizing: border-box;
 }
 @media (min-width: 640px) {
   .portal-container {
-    padding-left: 2rem;
-    padding-right: 2rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }
 @media (min-width: 1024px) {
   .portal-container {
-    padding-left: 3rem;
-    padding-right: 3rem;
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
   }
 }
 @media (min-width: 1280px) {
@@ -491,19 +529,20 @@ font {
   width: 100%;
   margin-left: auto;
   margin-right: auto;
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  box-sizing: border-box;
 }
 @media (min-width: 640px) {
   .portal-container-full {
-    padding-left: 2rem;
-    padding-right: 2rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }
 @media (min-width: 1024px) {
   .portal-container-full {
-    padding-left: 3rem;
-    padding-right: 3rem;
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
   }
 }
 @media (min-width: 1280px) {
