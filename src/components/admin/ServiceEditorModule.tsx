@@ -72,7 +72,9 @@ export const ServiceEditorModule: React.FC<ServiceEditorModuleProps> = ({
 
   // Form State
   const [title, setTitle] = useState(initialService?.title || '');
-  const [categoryId, setCategoryId] = useState(initialService?.categoryId || (categories[0]?.id || ''));
+  const [categoryId, setCategoryId] = useState(
+    initialService?.categoryId || (categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || '')
+  );
   const [subCategory, setSubCategory] = useState(initialService?.subCategory || '');
   const [shortDescription, setShortDescription] = useState(initialService?.shortDescription || initialService?.description?.slice(0, 160) || '');
   const [fullDescription, setFullDescription] = useState(initialService?.fullDescription || initialService?.description || '');
@@ -120,6 +122,63 @@ export const ServiceEditorModule: React.FC<ServiceEditorModuleProps> = ({
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Synchronize form when initialService or categories prop changes
+  useEffect(() => {
+    if (initialService) {
+      setTitle(initialService.title || '');
+      setCategoryId(initialService.categoryId || (categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || ''));
+      setSubCategory(initialService.subCategory || '');
+      setShortDescription(initialService.shortDescription || initialService.description?.slice(0, 160) || '');
+      setFullDescription(initialService.fullDescription || initialService.description || '');
+      setImageUrl(initialService.imageUrl || initialService.bannerImage || initialService.image || 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400');
+      setGovFees(initialService.govFees ?? 0);
+      setServiceCharge(initialService.serviceCharge ?? 0);
+      setProcessingTime(initialService.processingTime || initialService.estimatedTime || '3-5 Working Days');
+      setEligibility(initialService.eligibility || 'All eligible Indian citizens and businesses');
+      setDocuments(
+        Array.isArray(initialService.requiredDocuments)
+          ? initialService.requiredDocuments
+          : (typeof initialService.requiredDocuments === 'string' ? (initialService.requiredDocuments as string).split(',').map(d => d.trim()).filter(Boolean) : [])
+      );
+      setHighlights(
+        Array.isArray(initialService.highlights) && initialService.highlights.length > 0
+          ? initialService.highlights
+          : ['100% Online Document Assistance', 'Pre-Verification of Documents by Experts', 'Step-by-Step WhatsApp Guidance']
+      );
+      setWhatsAppEnabled(initialService.whatsAppEnabled !== false);
+      setSlug(initialService.slug || '');
+      setIsCustomSlug(!!initialService.slug);
+      setSeoTitle(initialService.seoTitle || '');
+      setSeoDescription(initialService.seoDescription || '');
+      setStatus(initialService.status || 'active');
+      setFeatured(!!initialService.featured);
+      setPopular(!!initialService.popular);
+    } else {
+      // Clean slate for new service
+      setTitle('');
+      setCategoryId(categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || '');
+      setSubCategory('');
+      setShortDescription('');
+      setFullDescription('');
+      setImageUrl('https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400');
+      setGovFees(0);
+      setServiceCharge(0);
+      setProcessingTime('3-5 Working Days');
+      setEligibility('All eligible Indian citizens and businesses');
+      setDocuments(['Aadhaar Card', 'Photograph']);
+      setHighlights(['100% Online Document Assistance', 'Pre-Verification of Documents by Experts', 'Step-by-Step WhatsApp Guidance']);
+      setWhatsAppEnabled(true);
+      setSlug('');
+      setIsCustomSlug(false);
+      setSeoTitle('');
+      setSeoDescription('');
+      setStatus('active');
+      setFeatured(false);
+      setPopular(false);
+    }
+    setIsDirty(false);
+  }, [initialService, categories]);
 
   // Sync WhatsApp number
   useEffect(() => {
@@ -236,13 +295,14 @@ export const ServiceEditorModule: React.FC<ServiceEditorModuleProps> = ({
 
     const finalStatus = forceDraft ? 'draft' : (status || 'active');
 
+    const cleanSlug = slug.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
     const servicePayload: Partial<Service> = {
-      id: initialService?.id || slug || title.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      id: initialService?.id || cleanSlug || `svc-${Date.now()}`,
       title: title.trim(),
-      categoryId,
+      categoryId: categoryId || (categories[0]?.id || ''),
       subCategory: subCategory.trim() || undefined,
-      description: shortDescription.trim(),
-      shortDescription: shortDescription.trim(),
+      description: shortDescription.trim() || fullDescription.trim(),
+      shortDescription: shortDescription.trim() || fullDescription.trim().slice(0, 160),
       fullDescription: fullDescription.trim() || shortDescription.trim(),
       bannerImage: imageUrl,
       imageUrl: imageUrl,
@@ -257,7 +317,7 @@ export const ServiceEditorModule: React.FC<ServiceEditorModuleProps> = ({
       whatsAppEnabled,
       seoTitle: seoTitle.trim() || title.trim(),
       seoDescription: seoDescription.trim() || shortDescription.trim(),
-      slug: slug.trim() || undefined,
+      slug: cleanSlug || undefined,
       status: finalStatus,
       featured,
       popular

@@ -19,42 +19,25 @@ export const CATALOG_CACHE_KEYS = {
   LAST_UPDATED: 'easydesk_cache_last_updated'
 };
 
-const KNOWN_DEMO_SERVICE_IDS = new Set(['passport', 'gst-reg', 'msme', 'scholarship', 'resume', 'web-dev']);
-const KNOWN_DEMO_CAT_IDS = new Set(['gov', 'biz', 'edu', 'pers', 'util', 'legal', 'fin', 'it']);
-
 function sanitizeCachedData<T>(key: string, data: T): T {
   if (!Array.isArray(data)) return data;
-  if (key === CATALOG_CACHE_KEYS.SERVICES) {
-    const cleaned = data.filter((item: any) => item && !KNOWN_DEMO_SERVICE_IDS.has(item.id));
-    return cleaned as unknown as T;
-  }
-  if (key === CATALOG_CACHE_KEYS.CATEGORIES || key === CATALOG_CACHE_KEYS.CATEGORIES_ALL) {
-    const cleaned = data.filter((item: any) => item && !KNOWN_DEMO_CAT_IDS.has(item.id));
-    return cleaned as unknown as T;
-  }
-  return data;
+  // Ensure array elements are valid objects with IDs
+  const cleaned = data.filter((item: any) => item && typeof item === 'object' && item.id);
+  return cleaned as unknown as T;
 }
 
-// Immediately purge obsolete demo caches if present
+// Safely initialize cache versioning
 (function purgeLegacyDemoCaches() {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const purgedFlag = localStorage.getItem('easydesk_demo_cache_purged_v4');
+    const purgedFlag = localStorage.getItem('easydesk_cache_synced_v5');
     if (!purgedFlag) {
-      const rawServ = localStorage.getItem(CATALOG_CACHE_KEYS.SERVICES);
-      if (rawServ) {
-        try {
-          const parsed = JSON.parse(rawServ);
-          if (Array.isArray(parsed) && parsed.some((s: any) => s && KNOWN_DEMO_SERVICE_IDS.has(s.id))) {
-            localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
-            localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
-            localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
-            localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
-            localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
-          }
-        } catch {}
-      }
-      localStorage.setItem('easydesk_demo_cache_purged_v4', 'true');
+      localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
+      localStorage.setItem('easydesk_cache_synced_v5', 'true');
     }
   } catch {}
 })();

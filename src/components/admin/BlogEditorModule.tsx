@@ -53,7 +53,10 @@ export const BlogEditorModule: React.FC<BlogEditorModuleProps> = ({
 
   // Form State
   const [title, setTitle] = useState(initialBlog?.title || '');
-  const [categoryId, setCategoryId] = useState(initialBlog?.categoryId || (categories[0]?.id || ''));
+  const [categoryId, setCategoryId] = useState(
+    initialBlog?.categoryId || 
+    (categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || '')
+  );
   const [author, setAuthor] = useState(initialBlog?.author || currentUserName);
   const [excerpt, setExcerpt] = useState(initialBlog?.excerpt || initialBlog?.shortDescription || (initialBlog?.content ? initialBlog.content.slice(0, 160) : ''));
   const [content, setContent] = useState(initialBlog?.content || '');
@@ -89,6 +92,54 @@ export const BlogEditorModule: React.FC<BlogEditorModuleProps> = ({
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Synchronize form state on initialBlog or categories prop change
+  useEffect(() => {
+    if (initialBlog) {
+      setTitle(initialBlog.title || '');
+      const matchedCat = categories.find(c => c.id === initialBlog.categoryId || c.name.toLowerCase() === (initialBlog.category || '').toLowerCase());
+      setCategoryId(initialBlog.categoryId || matchedCat?.id || (categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || ''));
+      setAuthor(initialBlog.author || currentUserName);
+      setExcerpt(initialBlog.excerpt || initialBlog.shortDescription || (initialBlog.content ? initialBlog.content.slice(0, 160) : ''));
+      setContent(initialBlog.content || '');
+      setImageUrl(initialBlog.imageUrl || initialBlog.image || 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=400');
+      setTags(
+        Array.isArray(initialBlog.tags) 
+          ? initialBlog.tags 
+          : (typeof initialBlog.tags === 'string' ? (initialBlog.tags as string).split(',').map(t => t.trim()).filter(Boolean) : ['Government Schemes', 'Guide'])
+      );
+      setSlug(initialBlog.slug || '');
+      setIsCustomSlug(!!initialBlog.slug);
+      setSeoTitle(initialBlog.seoTitle || '');
+      setSeoDescription(initialBlog.seoDescription || '');
+      setFocusKeywords(initialBlog.focusKeywords || '');
+      setStatus(initialBlog.status || 'published');
+      setPublishDate(initialBlog.date ? new Date(initialBlog.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+      setScheduledAt(initialBlog.scheduledAt || '');
+      setCommentsEnabled(initialBlog.commentsEnabled !== false);
+      setFeatured(!!initialBlog.featured);
+    } else {
+      // Clean slate for new blog post
+      setTitle('');
+      setCategoryId(categories.find(c => (c.status || 'Active') === 'Active')?.id || categories[0]?.id || '');
+      setAuthor(currentUserName);
+      setExcerpt('');
+      setContent('');
+      setImageUrl('https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=400');
+      setTags(['Government Schemes', 'Guide']);
+      setSlug('');
+      setIsCustomSlug(false);
+      setSeoTitle('');
+      setSeoDescription('');
+      setFocusKeywords('');
+      setStatus('published');
+      setPublishDate(new Date().toISOString().slice(0, 10));
+      setScheduledAt('');
+      setCommentsEnabled(true);
+      setFeatured(false);
+    }
+    setIsDirty(false);
+  }, [initialBlog, categories, currentUserName]);
 
   // Auto-generate slug from title
   useEffect(() => {

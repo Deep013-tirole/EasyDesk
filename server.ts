@@ -6922,7 +6922,12 @@ app.post('/api/admin/services', authenticateToken, requireRole(['SUPER_ADMIN', '
   if (!service || !service.title || !service.categoryId) {
     return res.status(400).json({ message: 'Service title and Category ID are required' });
   }
-  const id = service.id || service.title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  let baseId = service.id || service.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  if (!baseId) baseId = `svc-${Date.now()}`;
+  let id = baseId;
+  if (dbState.services.some(s => s.id === id)) {
+    id = `${baseId}-${Date.now().toString().slice(-4)}`;
+  }
   const newSvc = {
     id,
     categoryId: service.categoryId,
@@ -6967,7 +6972,12 @@ app.put('/api/admin/services/:id', authenticateToken, requireRole(['SUPER_ADMIN'
   const idx = dbState.services.findIndex(s => s.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Service not found' });
   
-  dbState.services[idx] = { ...dbState.services[idx], ...service };
+  dbState.services[idx] = { 
+    ...dbState.services[idx], 
+    ...service,
+    id: req.params.id,
+    categoryId: service.categoryId || dbState.services[idx].categoryId
+  };
   logSystemAction(updaterId || (req as any).user?.id || 'super-admin-deepak', updaterName || (req as any).user?.name || 'Deepak', updaterRole || (req as any).user?.role || 'SUPER_ADMIN', 'SERVICE_UPDATE', `Updated service ${dbState.services[idx].title}`);
   await persistDatabase('services', dbState.services[idx].id);
   res.json(dbState.services[idx]);
@@ -7084,6 +7094,7 @@ app.put('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN', '
   dbState.blogs[idx] = { 
     ...dbState.blogs[idx], 
     ...blog,
+    id: req.params.id,
     categoryId: targetCatId,
     category: targetCatName,
     tags: Array.isArray(blog.tags) ? blog.tags : (typeof blog.tags === 'string' ? blog.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : (dbState.blogs[idx].tags || []))
@@ -7091,6 +7102,19 @@ app.put('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN', '
   logSystemAction(updaterId || (req as any).user?.id || 'super-admin-deepak', updaterName || (req as any).user?.name || 'Deepak', updaterRole || (req as any).user?.role || 'SUPER_ADMIN', 'BLOG_UPDATE', `Updated blog ${dbState.blogs[idx].title}`);
   await persistDatabase('blogs', dbState.blogs[idx].id);
   res.json(dbState.blogs[idx]);
+});
+
+app.get(['/api/blogs/:id', '/api/blog/:id'], (req, res) => {
+  const blog = (dbState.blogs || []).find(b => b.id === req.params.id || b.slug === req.params.id);
+  if (!blog) {
+    return res.status(404).json({ message: 'Blog article not found.' });
+  }
+  const blogCat = (dbState.blogCategories || []).find(c => c.id === blog.categoryId || c.name.toLowerCase() === (blog.category || '').toLowerCase());
+  res.json({
+    ...blog,
+    categoryId: blogCat ? blogCat.id : (blog.categoryId || 'blog-cat-gov'),
+    category: blogCat ? blogCat.name : (blog.category || 'Government Schemes')
+  });
 });
 
 app.delete('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {

@@ -8,7 +8,7 @@ import {
   Power, PowerOff
 } from 'lucide-react';
 import { ServiceCategory, BlogCategory, Service, Blog } from '../../types.js';
-import { invalidateCategoriesCache } from '../../services/catalogService.js';
+import { invalidateAllCatalogsCache } from '../../services/catalogService.js';
 
 interface CategoryManagementAdminModuleProps {
   categories: ServiceCategory[];
@@ -260,7 +260,7 @@ export default function CategoryManagementAdminModule({
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
-        invalidateCategoriesCache();
+        invalidateAllCatalogsCache();
         triggerAlert(isEditing ? `Category '${formData.name}' updated successfully.` : `New category '${formData.name}' created!`);
         setIsModalOpen(false);
         onRefreshCatalogs?.();
@@ -292,7 +292,7 @@ export default function CategoryManagementAdminModule({
       });
 
       if (res.ok) {
-        invalidateCategoriesCache();
+        invalidateAllCatalogsCache();
         triggerAlert(newStatus === 'Active' 
           ? `Category '${item.name}' activated successfully.` 
           : `Category '${item.name}' deactivated successfully.`);
@@ -336,7 +336,7 @@ export default function CategoryManagementAdminModule({
         })
       ]);
 
-      invalidateCategoriesCache();
+      invalidateAllCatalogsCache();
       triggerAlert(`Reordered categories.`);
       onRefreshCatalogs?.();
     } catch (err: any) {
@@ -383,7 +383,7 @@ export default function CategoryManagementAdminModule({
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
-        invalidateCategoriesCache();
+        invalidateAllCatalogsCache();
         triggerAlert(resData.message || `Category '${cat.name}' deleted successfully.`);
         setDeleteModal({ isOpen: false, category: null, type: 'services', fallbackId: '', linkedCount: 0 });
         onRefreshCatalogs?.();
