@@ -3,7 +3,8 @@ import {
   ArrowLeft, CheckCircle2, Clock, ShieldCheck, FileText, 
   HelpCircle, MessageSquare, Bot, Star, ChevronDown, 
   ChevronUp, Sparkles, Building2, Award, Zap, CheckSquare, 
-  Users, AlertCircle, ArrowRight, Share2, Copy, Check
+  Users, AlertCircle, ArrowRight, Share2, Copy, Check,
+  Maximize2, X, ZoomIn
 } from 'lucide-react';
 import { Service, ServiceCategory, Review } from '../types.js';
 import { openWhatsAppForService, openGeneralWhatsApp } from '../lib/whatsapp.js';
@@ -33,7 +34,15 @@ export default function ServiceDetailsView({
   const [activeNavTab, setActiveNavTab] = useState<string>('overview');
   const [openFaqIndices, setOpenFaqIndices] = useState<number[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Reset image error and modal state on service switch
+  useEffect(() => {
+    setImageError(false);
+    setIsImageModalOpen(false);
+  }, [serviceId]);
 
   // Scroll to top immediately when service changes
   useEffect(() => {
@@ -266,21 +275,50 @@ export default function ServiceDetailsView({
             {/* Right Hero Image / Illustration Card */}
             <div className="lg:col-span-4 min-w-0 w-full">
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 shadow-xs overflow-hidden w-full">
-                {service.image || service.imageUrl || service.bannerImage ? (
-                  <div className="relative rounded-xl overflow-hidden aspect-16/10 bg-slate-100 border border-slate-200/60">
+                {(service.image || service.imageUrl || service.bannerImage) && !imageError ? (
+                  <div 
+                    onClick={() => setIsImageModalOpen(true)}
+                    className="relative rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200/80 min-h-[190px] sm:min-h-[220px] max-h-[340px] flex items-center justify-center group cursor-pointer"
+                    title="Click to view full banner"
+                  >
+                    {/* Ambient background fill to prevent harsh letterbox voids without cropping */}
+                    <img 
+                      src={service.image || service.imageUrl || service.bannerImage} 
+                      alt="" 
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full object-cover blur-xl opacity-25 scale-125 select-none pointer-events-none"
+                    />
+                    
+                    {/* 100% Uncropped full banner image */}
                     <img 
                       src={service.image || service.imageUrl || service.bannerImage} 
                       alt={service.title} 
-                      className="w-full h-full object-cover"
+                      onError={() => setImageError(true)}
+                      className="relative z-10 w-full h-auto max-h-[280px] sm:max-h-[320px] object-contain transition-transform duration-300 group-hover:scale-[1.02]"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute top-2 left-2 bg-slate-900/75 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+
+                    {/* Verified Badge */}
+                    <div className="absolute top-2.5 left-2.5 z-20 bg-slate-900/80 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs">
                       <ShieldCheck className="w-3 h-3 text-cyan-300" /> EasyDesk Verified
                     </div>
+
+                    {/* Expand/View Full Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsImageModalOpen(true);
+                      }}
+                      className="absolute bottom-2.5 right-2.5 z-20 bg-slate-900/80 hover:bg-slate-950 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Maximize2 className="w-3 h-3 text-cyan-300" />
+                      <span>View Full</span>
+                    </button>
                   </div>
                 ) : (
                   /* Elegant Graceful Illustration Fallback - NEVER Blank */
-                  <div className="relative rounded-xl overflow-hidden aspect-16/10 bg-gradient-to-br from-blue-900 via-[#0F4C81] to-slate-900 p-5 flex flex-col justify-between text-white border border-blue-800/40 shadow-inner">
+                  <div className="relative rounded-xl overflow-hidden min-h-[190px] sm:min-h-[220px] bg-gradient-to-br from-blue-900 via-[#0F4C81] to-slate-900 p-5 flex flex-col justify-between text-white border border-blue-800/40 shadow-inner">
                     <div className="flex justify-between items-start">
                       <div className="bg-white/10 backdrop-blur-md p-2 rounded-xl border border-white/10">
                         <Building2 className="w-6 h-6 text-cyan-300" />
@@ -881,6 +919,61 @@ export default function ServiceDetailsView({
           }
         }}
       />
+
+      {/* Full Banner Image Lightbox Modal */}
+      {isImageModalOpen && (service.image || service.imageUrl || service.bannerImage) && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <div 
+            className="relative bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Lightbox Header */}
+            <div className="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] font-extrabold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md">
+                  {categoryName}
+                </span>
+                <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                  {service.title} - Official Service Banner
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsImageModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Lightbox Body with 100% Uncut Image */}
+            <div className="p-3 sm:p-6 flex-1 flex items-center justify-center overflow-auto bg-slate-950/60">
+              <img
+                src={service.image || service.imageUrl || service.bannerImage}
+                alt={service.title}
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl shadow-lg border border-slate-800"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {/* Lightbox Footer */}
+            <div className="px-4 py-2.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Pre-verified by EasyDesk Officers
+              </span>
+              <button
+                onClick={() => openWhatsAppForService(service, categoryName)}
+                className="bg-[#10B981] hover:bg-[#0e9f6e] text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Order on WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
