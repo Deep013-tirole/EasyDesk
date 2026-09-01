@@ -15,6 +15,7 @@ import {
   Check,
   HelpCircle
 } from 'lucide-react';
+import { renderRichText } from '../../utils/richTextRenderer';
 
 interface RichFormattingEditorProps {
   label: string;
@@ -48,8 +49,8 @@ export const RichFormattingEditor: React.FC<RichFormattingEditorProps> = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
     const selectedText = value.substring(start, end) || defaultText;
 
     const before = value.substring(0, start);
@@ -58,23 +59,26 @@ export const RichFormattingEditor: React.FC<RichFormattingEditorProps> = ({
     const newText = `${before}${prefix}${selectedText}${suffix}${after}`;
     onChange(newText);
 
-    // Restore focus and cursor position
+    // Restore focus and select the inserted text for instant editing
     setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + prefix.length + selectedText.length + suffix.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 10);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const selectionStart = start + prefix.length;
+        const selectionEnd = selectionStart + selectedText.length;
+        textareaRef.current.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }, 20);
   };
 
   const insertLinePrefix = (prefix: string) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const start = textarea.selectionStart;
+    const start = textarea.selectionStart ?? value.length;
     const before = value.substring(0, start);
     const after = value.substring(start);
 
-    // If not at beginning of line, add newline
+    // If not at beginning of a new line, insert newline before prefix
     const needsNewline = before.length > 0 && !before.endsWith('\n');
     const insertString = (needsNewline ? '\n' : '') + prefix + ' ';
 
@@ -82,16 +86,25 @@ export const RichFormattingEditor: React.FC<RichFormattingEditorProps> = ({
     onChange(newText);
 
     setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + insertString.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 10);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newCursorPos = start + insertString.length;
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 20);
   };
 
   const handleInsertLink = () => {
-    const url = window.prompt('Enter destination URL:', 'https://');
-    if (!url) return;
-    const linkText = window.prompt('Enter link display text:', 'Click here') || url;
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? 0;
+    const end = textarea?.selectionEnd ?? 0;
+    const selectedText = textarea ? value.substring(start, end) : '';
+
+    const defaultUrl = 'https://';
+    const url = window.prompt('Enter destination URL:', defaultUrl);
+    if (!url || url === 'https://') return;
+
+    const linkText = selectedText || window.prompt('Enter link display text:', 'Official Portal') || 'Link';
     insertFormatting(`[${linkText}](`, `${url})`, '');
   };
 
@@ -105,90 +118,7 @@ export const RichFormattingEditor: React.FC<RichFormattingEditorProps> = ({
       );
     }
 
-    const paragraphs = content.split('\n\n');
-    return (
-      <div className="space-y-3.5 text-xs text-slate-800 leading-relaxed font-sans">
-        {paragraphs.map((para, idx) => {
-          const trimmed = para.trim();
-          if (!trimmed) return null;
-
-          if (trimmed.startsWith('## ')) {
-            return (
-              <h2 key={idx} className="text-base font-extrabold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-200">
-                {trimmed.replace(/^##\s+/, '')}
-              </h2>
-            );
-          }
-
-          if (trimmed.startsWith('### ')) {
-            return (
-              <h3 key={idx} className="text-sm font-bold text-slate-900 mt-3 mb-1 text-[#0F4C81]">
-                {trimmed.replace(/^###\s+/, '')}
-              </h3>
-            );
-          }
-
-          if (trimmed.startsWith('> ') || trimmed.startsWith('IMPORTANT:') || trimmed.startsWith('NOTE:')) {
-            const clean = trimmed.replace(/^>\s*(\[IMPORTANT\]|IMPORTANT:?|\[NOTE\]|NOTE:?)/i, '').replace(/^(IMPORTANT:|NOTE:)/i, '').trim();
-            return (
-              <div key={idx} className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-amber-950 text-xs">
-                <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11px] mb-1">
-                  <Info className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Important Note</span>
-                </div>
-                <p className="pl-5 text-amber-900/90">{clean || trimmed.replace(/^>\s*/, '')}</p>
-              </div>
-            );
-          }
-
-          if (trimmed.split('\n').every(line => line.trim().startsWith('- ') || line.trim().startsWith('* '))) {
-            const items = trimmed.split('\n').map(l => l.trim().replace(/^[-*]\s+/, ''));
-            return (
-              <ul key={idx} className="space-y-1.5 pl-2 list-none">
-                {items.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-slate-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#0F4C81] mt-1.5 shrink-0" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            );
-          }
-
-          if (trimmed.split('\n').every(line => /^\d+\.\s+/.test(line.trim()))) {
-            const items = trimmed.split('\n').map(l => l.trim().replace(/^\d+\.\s+/, ''));
-            return (
-              <ol key={idx} className="space-y-1.5 pl-2 list-none">
-                {items.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-slate-700">
-                    <span className="w-4 h-4 rounded bg-blue-50 text-[#0F4C81] font-bold text-[10px] flex items-center justify-center shrink-0 border border-blue-200">
-                      {i + 1}
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ol>
-            );
-          }
-
-          // Format bold and italic spans in standard paragraphs
-          const formattedLines = trimmed.split('\n').map((line, lIdx) => {
-            // Simple replace of **bold** and *italic*
-            return (
-              <span key={lIdx} className="block">
-                {line}
-              </span>
-            );
-          });
-
-          return (
-            <p key={idx} className="text-slate-700 leading-relaxed">
-              {formattedLines}
-            </p>
-          );
-        })}
-      </div>
-    );
+    return renderRichText(content);
   };
 
   return (

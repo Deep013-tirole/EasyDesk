@@ -9,6 +9,7 @@ import { Blog, BlogCategory, BlogComment } from '../../types.js';
 import { openGeneralWhatsApp } from '../../lib/whatsapp.js';
 import BlogCard from './BlogCard.js';
 import ContentUnavailable from '../ContentUnavailable.js';
+import { renderRichText } from '../../utils/richTextRenderer';
 
 interface BlogDetailViewProps {
   blog: Blog;
@@ -116,95 +117,7 @@ export default function BlogDetailView({
   // Helper to render formatted article content blocks
   const renderFormattedContent = (content: string) => {
     if (!content) return null;
-
-    const paragraphs = content.split(/\n\s*\n/);
-
-    return paragraphs.map((block, idx) => {
-      const trimmed = block.trim();
-
-      // Heading 2: ## Title
-      if (trimmed.startsWith('## ')) {
-        return (
-          <h2 key={idx} className="text-xl sm:text-2xl font-black text-slate-900 mt-8 mb-3 pt-2 tracking-tight">
-            {trimmed.replace(/^##\s+/, '')}
-          </h2>
-        );
-      }
-
-      // Heading 3: ### Title
-      if (trimmed.startsWith('### ')) {
-        return (
-          <h3 key={idx} className="text-lg font-bold text-slate-900 mt-6 mb-2">
-            {trimmed.replace(/^###\s+/, '')}
-          </h3>
-        );
-      }
-
-      // Highlighted Important Notice Box: > IMPORTANT or > [IMPORTANT] or IMPORTANT:
-      if (
-        trimmed.startsWith('> IMPORTANT') || 
-        trimmed.startsWith('> [IMPORTANT]') || 
-        trimmed.startsWith('IMPORTANT:') ||
-        trimmed.startsWith('NOTE:') ||
-        trimmed.startsWith('> NOTE')
-      ) {
-        const cleanText = trimmed
-          .replace(/^>\s*(\[IMPORTANT\]|IMPORTANT:?|\[NOTE\]|NOTE:?)/i, '')
-          .replace(/^(IMPORTANT:|NOTE:)/i, '')
-          .trim();
-
-        return (
-          <div key={idx} className="my-6 p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs sm:text-sm leading-relaxed shadow-xs">
-            <div className="flex items-center gap-2 font-black text-amber-900 uppercase tracking-wide text-xs mb-1.5">
-              <Info className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>Important Guidance Note</span>
-            </div>
-            <p className="font-medium text-amber-900/90 pl-6">
-              {cleanText || "Always verify current document prerequisites and fee structures from official government gazettes before submitting your final verification application."}
-            </p>
-          </div>
-        );
-      }
-
-      // Bulleted List Block
-      if (trimmed.split('\n').every(line => line.trim().startsWith('- ') || line.trim().startsWith('* '))) {
-        const items = trimmed.split('\n').map(line => line.trim().replace(/^[-*]\s+/, ''));
-        return (
-          <ul key={idx} className="my-4 space-y-2 text-xs sm:text-sm text-slate-700 list-none pl-1">
-            {items.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0F4C81] mt-2 shrink-0" />
-                <span className="leading-relaxed">{item}</span>
-              </li>
-            ))}
-          </ul>
-        );
-      }
-
-      // Numbered List Block
-      if (trimmed.split('\n').every(line => /^\d+\.\s+/.test(line.trim()))) {
-        const items = trimmed.split('\n').map(line => line.trim().replace(/^\d+\.\s+/, ''));
-        return (
-          <ol key={idx} className="my-4 space-y-2 text-xs sm:text-sm text-slate-700 list-none pl-1">
-            {items.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-md bg-blue-50 text-[#0F4C81] font-mono font-bold text-xs flex items-center justify-center shrink-0 border border-blue-100">
-                  {i + 1}
-                </span>
-                <span className="leading-relaxed pt-0.5">{item}</span>
-              </li>
-            ))}
-          </ol>
-        );
-      }
-
-      // Standard Paragraph
-      return (
-        <p key={idx} className="text-xs sm:text-sm sm:text-base text-slate-700 leading-relaxed font-normal">
-          {trimmed}
-        </p>
-      );
-    });
+    return renderRichText(content);
   };
 
   return (

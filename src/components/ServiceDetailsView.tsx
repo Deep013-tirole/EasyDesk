@@ -9,6 +9,7 @@ import { Service, ServiceCategory, Review } from '../types.js';
 import { openWhatsAppForService, openGeneralWhatsApp } from '../lib/whatsapp.js';
 import ReviewSubmissionModal from './ReviewSubmissionModal.js';
 import ContentUnavailable from './ContentUnavailable.js';
+import { renderRichText } from '../utils/richTextRenderer';
 
 interface ServiceDetailsViewProps {
   serviceId: string;
@@ -358,8 +359,10 @@ export default function ServiceDetailsView({
                 <h2 className="text-sm sm:text-base font-bold text-slate-900">Service Overview & Scope</h2>
               </div>
 
-              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed space-y-3 whitespace-pre-line font-normal">
-                {service.fullDescription || service.description || (
+              <div className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
+                {service.fullDescription || service.description ? (
+                  renderRichText(service.fullDescription || service.description)
+                ) : (
                   <p>
                     EasyDesk provides comprehensive end-to-end guidance for {service.title}. Our dedicated desk officers verify every document and submission requirement to ensure swift processing without rejection.
                   </p>
