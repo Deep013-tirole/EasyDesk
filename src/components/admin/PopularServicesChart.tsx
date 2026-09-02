@@ -397,7 +397,7 @@ export default function PopularServicesChart({ orders, services }: PopularServic
           <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-blue-600" /> Audited Services Order Breakdown
           </h3>
-          <span className="text-[10px] text-slate-500">Direct from Cloud Firestore</span>
+          <span className="text-[10px] text-slate-500">Direct from Cloudflare D1</span>
         </div>
 
         <div className="overflow-x-auto text-xs">

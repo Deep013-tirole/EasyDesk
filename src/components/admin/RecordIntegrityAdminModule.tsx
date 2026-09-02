@@ -33,7 +33,6 @@ export default function RecordIntegrityAdminModule({ adminUser, onRefreshData }:
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [repairing, setRepairing] = useState<boolean>(false);
-  const [scanFirestore, setScanFirestore] = useState<boolean>(false);
   const [selectedDomain, setSelectedDomain] = useState<string>('ALL');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -46,10 +45,10 @@ export default function RecordIntegrityAdminModule({ adminUser, onRefreshData }:
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const fetchIntegrityReport = async (liveFirestore: boolean = scanFirestore) => {
+  const fetchIntegrityReport = async () => {
     setLoading(true);
     try {
-      const res = await adminFetch(`/api/admin/validation/report?firestore=${liveFirestore ? 'true' : 'false'}`);
+      const res = await adminFetch(`/api/admin/validation/report?engine=d1`);
       if (res.ok) {
         const data: ValidationReport = await res.json();
         setReport(data);
@@ -88,7 +87,7 @@ export default function RecordIntegrityAdminModule({ adminUser, onRefreshData }:
   };
 
   useEffect(() => {
-    fetchIntegrityReport(false);
+    fetchIntegrityReport();
   }, []);
 
   const handleCopyReport = () => {
@@ -184,7 +183,7 @@ ${report.findings.map(f => `[${f.severity}] [${f.collection}] [${f.issueType}] $
                 <li>Re-key sub-records (KYC, Payroll, Accounts) to canonical Employee IDs</li>
                 <li>Synchronize order staff assignments with canonical profile codes and names</li>
                 <li>Relink unlinked orders to customer records by verified email or mobile</li>
-                <li>Persist clean snapshots to Cloud Firestore and log an audit trail</li>
+                <li>Persist clean snapshots to Cloudflare D1 database and log an audit trail</li>
               </ul>
             </div>
 
@@ -220,29 +219,19 @@ ${report.findings.map(f => `[${f.severity}] [${f.collection}] [${f.issueType}] $
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-800">Record Relationship Integrity Engine</h2>
-                <p className="text-xs text-slate-500">Centralized validation scanning Firestore collections across Employees, Customers, KYC, Payroll, Documents & Orders</p>
+                <p className="text-xs text-slate-500">Centralized validation scanning D1 tables across Employees, Customers, KYC, Payroll, Documents & Orders</p>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl cursor-pointer transition select-none">
-              <input
-                type="checkbox"
-                checked={scanFirestore}
-                onChange={(e) => setScanFirestore(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-              />
-              <span className="font-medium text-[11px]">Direct Firestore Scan</span>
-            </label>
-
             <button
-              onClick={() => fetchIntegrityReport(scanFirestore)}
+              onClick={() => fetchIntegrityReport()}
               disabled={loading || repairing}
               className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Scanning...' : 'Scan Now'}
+              {loading ? 'Scanning...' : 'Scan D1 Database'}
             </button>
 
             <button
@@ -326,7 +315,7 @@ ${report.findings.map(f => `[${f.severity}] [${f.collection}] [${f.issueType}] $
       {report && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Scanned Firestore Collections</h3>
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Scanned D1 Collections</h3>
             <span className="text-[11px] text-slate-400">Scan mode: {report.scanSource}</span>
           </div>
 

@@ -37,8 +37,7 @@ export async function validateRecordRelationships(
   const timestamp = new Date().toISOString();
 
   // Active dataset scan source
-  let rawFirestoreCollections: Record<string, any[]> = {};
-  let scanSource: 'FIRESTORE_LIVE' | 'MEMORY_AND_FIRESTORE' | 'LOCAL_STATE' = 'LOCAL_STATE';
+  let scanSource: 'D1_LIVE' | 'D1_STORE' | 'LOCAL_STATE' = 'D1_STORE';
 
   // Active dataset references
   const employees: EmployeeProfile[] = Array.isArray(dbState.employees) ? dbState.employees : [];
@@ -583,7 +582,7 @@ export async function repairRecordRelationships(
     details: string[];
   };
 }> {
-  const beforeReport = await validateRecordRelationships(dbState, { scanFirestore: false });
+  const beforeReport = await validateRecordRelationships(dbState, { scanDatabase: true });
   const details: string[] = [];
   let repairedKeysCount = 0;
   let relinkedOrdersCount = 0;
@@ -782,7 +781,7 @@ export async function repairRecordRelationships(
     await persistFn('orders');
   }
 
-  const afterReport = await validateRecordRelationships(dbState, { scanFirestore: false });
+  const afterReport = await validateRecordRelationships(dbState, { scanDatabase: true });
 
   const repairsApplied = {
     repairedKeysCount,

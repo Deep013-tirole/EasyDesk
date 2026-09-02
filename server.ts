@@ -25,21 +25,23 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
   });
 }
 import { 
-  getFirestoreDb, 
-  loadStateFromFirestore, 
-  loadFirestoreDoc,
-  seedFirestoreFromInitialState, 
-  persistFirestoreChange, 
-  saveFirestoreDoc, 
-  deleteFirestoreDoc, 
-  saveFirestoreSetting,
   sanitizePaymentConfig,
+  getD1Database,
+  getR2Storage,
+  loadStateFromD1,
+  saveEntityToD1,
+  deleteEntityFromD1,
+  saveSettingToD1,
+  syncCollectionToD1,
+  seedD1FromState,
+  loadEntityFromD1,
   putR2File,
   getR2File,
   deleteR2File,
   ENTITY_COLLECTIONS,
-  SETTING_KEYS
-} from './src/lib/serverDb.js';
+  SETTING_KEYS,
+  OBJECT_COLLECTIONS
+} from './src/lib/d1Storage.js';
 import { 
   validateRecordRelationships, 
   repairRecordRelationships 
@@ -77,7 +79,7 @@ const PORT = 3000;
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 
-// Middleware to ensure Firestore hydration completes before serving ANY requests
+// Middleware to ensure D1 database hydration completes before serving ANY requests
 app.use(async (req, res, next) => {
   if (req.path.startsWith('/api')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
@@ -96,13 +98,14 @@ app.use(async (req, res, next) => {
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
-  const db = getFirestoreDb();
+  const d1 = getD1Database();
   res.json({
     status: 'ok',
-    database: db ? 'connected' : 'disconnected',
+    database: d1 ? 'cloudflare_d1_connected' : 'local_store_connected',
+    databaseEngine: d1 ? 'Cloudflare D1 SQL (Edge)' : 'Local JSON Store',
     environment: process.env.NODE_ENV || 'production',
     version: '1.0.0',
-    firestoreReady: isFirestoreReady
+    databaseReady: isDatabaseReady
   });
 });
 
@@ -1313,7 +1316,7 @@ function getBaselineSeedState(): Record<string, any> {
   };
 }
 
-// Memory state container - starts clean so authoritative Firestore data is always served
+// Memory state container - starts clean so authoritative Cloudflare D1 data is always served
 let dbState: Record<string, any> = {
   users: [...PRESEEDED_USERS],
   customers: [] as any[],
@@ -2288,187 +2291,172 @@ function normalizeDatabaseRelationships() {
 
 async function persistDatabase(collectionOrKey?: string, id?: string): Promise<void> {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), 'utf-8');
+    if (fs.writeFileSync) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), 'utf-8');
+    }
   } catch (e) {
     // Local dev cache file write error ignored
   }
 
-  // Authoritative sync to Firestore
-  try {
-    await persistFirestoreChange(dbState, collectionOrKey, id);
-  } catch (err) {
-    console.error('[FIREBASE ASYNC SYNC ERROR]', err);
+  // Authoritative sync to Cloudflare D1 if available
+  const d1 = getD1Database();
+  if (d1) {
+    if (collectionOrKey && SETTING_KEYS.includes(collectionOrKey as any)) {
+      if (dbState[collectionOrKey] !== undefined) {
+        const res = await saveSettingToD1(collectionOrKey, dbState[collectionOrKey], d1);
+        if (!res.success) {
+          console.error(`[D1 SYNC ERROR] saveSettingToD1 failed for ${collectionOrKey}:`, res.error);
+          throw new Error(`D1 persistence failed for setting ${collectionOrKey}: ${res.error}`);
+        }
+      }
+    } else if (collectionOrKey && (ENTITY_COLLECTIONS.includes(collectionOrKey as any) || OBJECT_COLLECTIONS.has(collectionOrKey))) {
+      const val = dbState[collectionOrKey];
+      if (Array.isArray(val)) {
+        if (id) {
+          const item = val.find((x: any) => x && String(x.id || x.code) === String(id));
+          if (item) {
+            const res = await saveEntityToD1(collectionOrKey, String(id), item, d1);
+            if (!res.success) {
+              console.error(`[D1 SYNC ERROR] saveEntityToD1 failed for ${collectionOrKey}/${id}:`, res.error);
+              throw new Error(`D1 persistence failed for ${collectionOrKey}/${id}: ${res.error}`);
+            }
+          } else {
+            const res = await deleteEntityFromD1(collectionOrKey, String(id), d1);
+            if (!res.success) {
+              console.error(`[D1 SYNC ERROR] deleteEntityFromD1 failed for ${collectionOrKey}/${id}:`, res.error);
+              throw new Error(`D1 persistence failed for ${collectionOrKey}/${id}: ${res.error}`);
+            }
+          }
+        } else {
+          const ok = await syncCollectionToD1(collectionOrKey, val, d1);
+          if (!ok) {
+            console.error(`[D1 SYNC ERROR] syncCollectionToD1 failed for ${collectionOrKey}`);
+            throw new Error(`D1 persistence failed for collection ${collectionOrKey}`);
+          }
+        }
+      } else if (val && typeof val === 'object') {
+        if (id) {
+          const item = val[id];
+          if (item) {
+            const res = await saveEntityToD1(collectionOrKey, String(id), item, d1);
+            if (!res.success) {
+              console.error(`[D1 SYNC ERROR] saveEntityToD1 failed for ${collectionOrKey}/${id}:`, res.error);
+              throw new Error(`D1 persistence failed for ${collectionOrKey}/${id}: ${res.error}`);
+            }
+          } else {
+            const res = await deleteEntityFromD1(collectionOrKey, String(id), d1);
+            if (!res.success) {
+              console.error(`[D1 SYNC ERROR] deleteEntityFromD1 failed for ${collectionOrKey}/${id}:`, res.error);
+              throw new Error(`D1 persistence failed for ${collectionOrKey}/${id}: ${res.error}`);
+            }
+          }
+        } else {
+          const itemsArr = Object.entries(val).map(([k, v]) => ({ id: k, ...(v as any) }));
+          const ok = await syncCollectionToD1(collectionOrKey, itemsArr, d1);
+          if (!ok) {
+            console.error(`[D1 SYNC ERROR] syncCollectionToD1 failed for ${collectionOrKey}`);
+            throw new Error(`D1 persistence failed for object collection ${collectionOrKey}`);
+          }
+        }
+      }
+    } else if (!collectionOrKey) {
+      // Full sync to D1
+      const seeded = await seedD1FromState(dbState, d1);
+      if (!seeded) {
+        throw new Error('Full D1 database seed synchronization failed');
+      }
+    }
   }
 }
 
-let isFirestoreReady = false;
-let firestoreInitPromise: Promise<void> | null = null;
+let isDatabaseReady = false;
+let databaseInitPromise: Promise<void> | null = null;
 
 export function ensureDatabaseReady(): Promise<void> {
-  if (isFirestoreReady) return Promise.resolve();
-  if (!firestoreInitPromise) {
-    firestoreInitPromise = asyncInitFirestoreDatabase().catch(err => {
-      console.error('[DB] Error during asyncInitFirestoreDatabase execution:', err);
-      firestoreInitPromise = null;
+  if (isDatabaseReady) return Promise.resolve();
+  if (!databaseInitPromise) {
+    databaseInitPromise = asyncInitDatabaseState().catch(err => {
+      console.error('[DB] Error during asyncInitDatabaseState execution:', err);
+      databaseInitPromise = null;
       throw err;
     });
   }
-  return firestoreInitPromise;
+  return databaseInitPromise;
 }
 
-async function asyncInitFirestoreDatabase(): Promise<void> {
-  try {
-    const result = await loadStateFromFirestore();
-    if (result && !result.isFreshDatabase) {
-      console.log(`[DB] Hydrating dbState from Cloud Firestore (${result.totalDocsLoaded} entity docs loaded)...`);
-      const firestoreState = result.state;
-
-      // Authoritatively assign all entity collections from Firestore (even if empty [])
-      for (const collName of ENTITY_COLLECTIONS) {
-        if (firestoreState[collName] !== undefined) {
-          dbState[collName] = firestoreState[collName];
-        }
-      }
-
-      // Assign settings
-      for (const key of SETTING_KEYS) {
-        if (firestoreState[key] !== undefined) {
-          dbState[key] = firestoreState[key];
-        }
-      }
-
-      // Harmonize privacy and security settings
-      if (firestoreState.privacySecurity || firestoreState.privacySecuritySettings) {
-        const ps = firestoreState.privacySecuritySettings || firestoreState.privacySecurity;
-        dbState.privacySecuritySettings = ps;
-        dbState.privacySecurity = ps;
-      }
-      // Harmonize payment settings
-      if (firestoreState.paymentConfig || firestoreState.paymentSettings || firestoreState.settings?.paymentConfig) {
-        const pay = sanitizePaymentConfig(firestoreState.paymentConfig || firestoreState.settings?.paymentConfig || firestoreState.paymentSettings);
-        dbState.paymentConfig = pay;
-        dbState.paymentSettings = pay;
-        if (!dbState.settings) dbState.settings = {};
-        dbState.settings.paymentConfig = pay;
-      }
-      // Harmonize contact settings and company profile
-      if (firestoreState.contactSettings) {
-        dbState.contactSettings = firestoreState.contactSettings;
-        if (!dbState.companyProfile) dbState.companyProfile = { ...PRESEEDED_COMPANY_PROFILE };
-        if (dbState.contactSettings.phone) dbState.companyProfile.phone = dbState.contactSettings.phone;
-        if (dbState.contactSettings.email) dbState.companyProfile.email = dbState.contactSettings.email;
-        if (dbState.contactSettings.companyName) dbState.companyProfile.companyName = dbState.contactSettings.companyName;
-      }
-      if (firestoreState.aboutUs) {
-        dbState.aboutUs = firestoreState.aboutUs;
-      }
-      if (firestoreState.founder) {
-        dbState.founder = firestoreState.founder;
-      }
-
-      // Synchronize users map from loaded admins and customers without overwriting credentials or creating duplicates
-      const userMap = new Map<string, any>();
-      (dbState.users || []).forEach((u: any) => {
-        const email = (u.email || '').toLowerCase().trim();
-        if (email) userMap.set(email, u);
-      });
-      (dbState.customers || []).forEach((c: any) => {
-        const email = (c.email || '').toLowerCase().trim();
-        if (!email) return;
-        const existing = userMap.get(email);
-        userMap.set(email, { 
-          id: c.id || existing?.id || `user-${Date.now()}`, 
-          name: c.name || existing?.name || 'Customer', 
-          email: c.email, 
-          mobile: c.mobile || existing?.mobile || '',
-          role: existing?.role || UserRole.USER, 
-          createdAt: c.createdAt || existing?.createdAt || new Date().toISOString(), 
-          isSuspended: !!c.isSuspended, 
-          password: c.password || existing?.password || DEFAULT_PASSWORD_HASH 
-        });
-      });
-      (dbState.admins || []).forEach((a: any) => {
-        const email = (a.email || '').toLowerCase().trim();
-        if (!email) return;
-        const existing = userMap.get(email);
-        userMap.set(email, { 
-          id: a.id || existing?.id || `admin-${Date.now()}`, 
-          name: a.name || existing?.name || 'Admin User', 
-          email: a.email, 
-          mobile: a.mobile || existing?.mobile || '',
-          role: email === 'tideepak8@gmail.com' ? 'SUPER_ADMIN' : (a.role === 'SUPER_ADMIN' ? 'ADMIN' : (a.role || 'ADMIN')), 
-          createdAt: a.createdAt || existing?.createdAt || new Date().toISOString(), 
-          isSuspended: !!a.isSuspended, 
-          password: a.password || existing?.password || DEFAULT_PASSWORD_HASH 
-        });
-      });
-      dbState.users = Array.from(userMap.values());
-
-      normalizeDatabaseRelationships();
-
-      // Pre-write all database media and employee photos to local disk for rapid serving (when filesystem available)
-      try {
-        if (Array.isArray(dbState.media)) {
-          for (const item of dbState.media) {
-            const rawData = (item as any).fileData || (item as any).base64 || (item as any).data || (item.url && item.url.startsWith('data:') ? item.url : null);
-            const fileName = (item as any).storedFileName || (item as any).storedName || item.name;
-            if (rawData && fileName) {
-              const folder = item.folder === 'employees' ? 'employees' : 'media';
-              const targetPath = path.join(process.cwd(), 'uploads', folder, fileName);
-              if (fs.existsSync && !fs.existsSync(targetPath)) {
-                let base64 = rawData;
-                if (base64.includes(';base64,')) {
-                  base64 = base64.split(';base64,')[1];
-                }
-                if (fs.mkdirSync && fs.writeFileSync) {
-                  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-                  fs.writeFileSync(targetPath, Buffer.from(base64, 'base64'));
-                }
-              }
-            }
+async function asyncInitDatabaseState(): Promise<void> {
+  const d1 = getD1Database();
+  
+  // 1. Attempt hydration from Cloudflare D1 if running on Cloudflare edge
+  if (d1) {
+    try {
+      console.log('[DB] Checking Cloudflare D1 database state...');
+      const d1Result = await loadStateFromD1(d1);
+      if (d1Result && !d1Result.isFreshDatabase && d1Result.totalDocsLoaded > 0) {
+        console.log(`[DB] Successfully hydrated dbState from Cloudflare D1 (${d1Result.totalDocsLoaded} records loaded)...`);
+        const d1State = d1Result.state;
+        for (const collName of ENTITY_COLLECTIONS) {
+          if (d1State[collName] !== undefined) {
+            dbState[collName] = d1State[collName];
           }
         }
-      } catch (mediaSyncErr) {
-        // Ignored in edge / serverless
-      }
-
-      try {
-        if (fs.writeFileSync) {
-          fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), 'utf-8');
+        for (const key of SETTING_KEYS) {
+          if (d1State[key] !== undefined) {
+            dbState[key] = d1State[key];
+          }
         }
-      } catch (e) {
-        // Local cache write error ignored
+        if (d1State.privacySecurity || d1State.privacySecuritySettings) {
+          const ps = d1State.privacySecuritySettings || d1State.privacySecurity;
+          dbState.privacySecuritySettings = ps;
+          dbState.privacySecurity = ps;
+        }
+        if (d1State.paymentConfig || d1State.paymentSettings || d1State.settings?.paymentConfig) {
+          const pay = sanitizePaymentConfig(d1State.paymentConfig || d1State.settings?.paymentConfig || d1State.paymentSettings);
+          dbState.paymentConfig = pay;
+          dbState.paymentSettings = pay;
+          if (!dbState.settings) dbState.settings = {};
+          dbState.settings.paymentConfig = pay;
+        }
+        normalizeDatabaseRelationships();
+        isDatabaseReady = true;
+        return;
+      } else {
+        console.log('[DB] Cloudflare D1 is fresh or empty. Will seed from baseline state.');
+        const seedState = getBaselineSeedState();
+        Object.assign(dbState, seedState);
+        normalizeDatabaseRelationships();
+        await seedD1FromState(dbState, d1);
+        isDatabaseReady = true;
+        return;
       }
+    } catch (d1InitErr) {
+      console.error('[DB] Error checking Cloudflare D1:', d1InitErr);
+    }
+  }
 
-      console.log('[DB] Successfully hydrated authoritative production dbState from Cloud Firestore!');
-      isFirestoreReady = true;
-    } else if (result && result.isFreshDatabase) {
-      console.log('[DB] Verified genuine empty Firestore database detected. Seeding initial baseline and system_init sentinel to Cloud Firestore...');
-      const seedState = getBaselineSeedState();
-      Object.assign(dbState, seedState);
-      normalizeDatabaseRelationships();
-      await seedFirestoreFromInitialState(dbState);
-      console.log('[DB] Baseline state and system_init sentinel successfully written to Cloud Firestore.');
-      isFirestoreReady = true;
-    } else {
-      console.log('[DB] Cloud Firestore currently in local fallback mode; active memory/disk state active.');
-      // Do not mark permanently ready so subsequent requests can re-attempt when network/quota recovers
-      isFirestoreReady = false;
-      setTimeout(() => { firestoreInitPromise = null; }, 30000);
+  // 2. Node / local fallback
+  try {
+    if (fs.existsSync && fs.existsSync(DB_FILE) && fs.readFileSync) {
+      const data = fs.readFileSync(DB_FILE, 'utf-8');
+      if (data && data.trim()) {
+        const parsed = JSON.parse(data);
+        Object.assign(dbState, parsed);
+      }
     }
   } catch (err) {
-    console.error('[DB] Error during async Firestore initialization, continuing with local store:', err);
-    isFirestoreReady = false;
-    setTimeout(() => { firestoreInitPromise = null; }, 30000);
+    console.error('[DB] Local file load warning:', err);
   }
+
+  normalizeDatabaseRelationships();
+  isDatabaseReady = true;
 }
 
 initDatabase();
 
-// In standalone Node.js environment, boot Firestore hydration immediately.
+// In standalone Node.js environment, boot database hydration immediately.
 // In Cloudflare Worker environment, do NOT execute I/O at top-level script evaluation.
 if (typeof process !== 'undefined' && !process.env.IS_WORKER && process.env.NODE_ENV !== 'test') {
-  firestoreInitPromise = asyncInitFirestoreDatabase();
+  databaseInitPromise = asyncInitDatabaseState();
 }
 
 // Lazy initialization of Gemini SDK
@@ -2881,7 +2869,7 @@ function xssSanitizer(req: express.Request, res: express.Response, next: express
   next();
 }
 
-// Database readiness middleware - ensures Firestore state is hydrated before handling API requests
+// Database readiness middleware - ensures D1 database state is hydrated before handling API requests
 app.use(async (req, res, next) => {
   if (req.path.startsWith('/api/')) {
     try {
@@ -3132,10 +3120,10 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
     }
   }
 
-  // If still not found in memory, attempt direct authoritative Firestore document lookup
+  // If still not found in memory, attempt direct authoritative D1 lookup if available
   if (!admin) {
     try {
-      const remoteDoc = await loadFirestoreDoc('admins', 'super-admin-deepak');
+      const remoteDoc = await loadEntityFromD1('admins', 'super-admin-deepak');
       if (remoteDoc && (
         (remoteDoc.email && remoteDoc.email.toLowerCase() === normalizedInput) ||
         normalizedInput === 'super-admin-deepak' ||
@@ -3165,7 +3153,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
         else dbState.admins.push(admin);
       }
     } catch (e) {
-      console.warn('[AUTH] Direct Firestore lookup error:', e);
+      console.warn('[AUTH] Direct D1 lookup error:', e);
     }
   }
 
@@ -3198,11 +3186,11 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
     }
   }
 
-  // If password comparison failed against in-memory record, check authoritative Firestore record directly
+  // If password comparison failed against in-memory record, check D1 edge database if available
   if (!isMatch) {
     try {
-      const fsDocId = admin.id || 'super-admin-deepak';
-      const remoteDoc = await loadFirestoreDoc('admins', fsDocId);
+      const d1DocId = admin.id || 'super-admin-deepak';
+      const remoteDoc = await loadEntityFromD1('admins', d1DocId);
       if (remoteDoc && remoteDoc.password) {
         if (remoteDoc.password.startsWith('$2a$') || remoteDoc.password.startsWith('$2b$')) {
           isMatch = bcrypt.compareSync(effectivePassword, remoteDoc.password);
@@ -3218,7 +3206,7 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
         }
       }
     } catch (e) {
-      console.warn('[AUTH] Authoritative Firestore password verification error:', e);
+      console.warn('[AUTH] D1 password verification check:', e);
     }
   }
 
@@ -3538,7 +3526,8 @@ app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
   if (!newPassword) return res.status(400).json({ message: 'Missing parameters' });
 
   // Locate in either collection
-  let userObj = dbState.customers.find(c => c.id === reqUser.id) || dbState.admins.find(a => a.id === reqUser.id);
+  let userObj = dbState.customers?.find(c => c.id === reqUser.id || (reqUser.email && c.email?.toLowerCase() === reqUser.email.toLowerCase())) || 
+                dbState.admins?.find(a => a.id === reqUser.id || (reqUser.email && a.email?.toLowerCase() === reqUser.email.toLowerCase()));
   if (!userObj) return res.status(404).json({ message: 'User not found' });
 
   if (oldPassword) {
@@ -3549,6 +3538,13 @@ app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
   }
 
   userObj.password = bcrypt.hashSync(newPassword, 10);
+
+  // Sync password to dbState.users collection
+  const uIdx = dbState.users?.findIndex(u => u.id === userObj.id || (userObj.email && u.email?.toLowerCase() === userObj.email.toLowerCase()));
+  if (uIdx !== undefined && uIdx !== -1) {
+    dbState.users[uIdx].password = userObj.password;
+    await persistDatabase('users', dbState.users[uIdx].id);
+  }
 
   addAuditLog(userObj.id, userObj.name, userObj.role, 'PASSWORD_CHANGE', 'User changed password via dashboard profile configuration.');
   await persistDatabase(userObj.role === UserRole.USER ? 'customers' : 'admins', userObj.id);
@@ -3615,9 +3611,15 @@ app.post('/api/admin/profile', async (req, res) => {
   if (uIdx !== -1) {
     dbState.users[uIdx].name = admin.name;
     dbState.users[uIdx].email = admin.email;
+    if (admin.password) {
+      dbState.users[uIdx].password = admin.password;
+    }
   }
 
   await persistDatabase('admins', admin.id);
+  if (uIdx !== -1) {
+    await persistDatabase('users', dbState.users[uIdx].id);
+  }
 
   const safeUser = {
     id: admin.id,
@@ -4740,7 +4742,7 @@ app.post('/api/notifications/read', async (req, res) => {
   res.json({ success: true });
 });
 
-// Admin Dashboard Analytics - Strict Firestore Single Source of Truth
+// Admin Dashboard Analytics - Strict Cloudflare D1 Single Source of Truth
 app.get('/api/admin/analytics', (req, res) => {
   const allOrders = dbState.orders || [];
   const allCustomers = dbState.customers || [];
@@ -4952,10 +4954,10 @@ app.get('/api/admin/analytics', (req, res) => {
       services: serviceBreakdown
     },
     integrity: {
-      source: 'Cloud Firestore (Single Source of Truth)',
+      source: 'Cloudflare D1 SQL (Single Source of Truth)',
       lastComputedAt: new Date().toISOString(),
       reconciliation: {
-        firestoreOrders: totalOrders,
+        d1Orders: totalOrders,
         adminQueueOrders: totalOrders,
         analyticsOrders: totalOrders,
         isReconciled: true
@@ -6729,8 +6731,7 @@ app.get('/api/admin/audit-logs', (req, res) => {
 // Centralized Validation & Integrity Verification Endpoints
 app.get('/api/admin/validation/report', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   try {
-    const scanFirestore = req.query.firestore === 'true';
-    const report = await validateRecordRelationships(dbState, { scanFirestore });
+    const report = await validateRecordRelationships(dbState, { scanDatabase: true });
     res.json(report);
   } catch (error: any) {
     console.error('[VALIDATION REPORT ERROR]', error);
@@ -6740,8 +6741,7 @@ app.get('/api/admin/validation/report', authenticateToken, requireRole(['SUPER_A
 
 app.post('/api/admin/validation/scan', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   try {
-    const scanFirestore = req.body.scanFirestore === true || req.query.firestore === 'true';
-    const report = await validateRecordRelationships(dbState, { scanFirestore });
+    const report = await validateRecordRelationships(dbState, { scanDatabase: true });
     res.json(report);
   } catch (error: any) {
     console.error('[VALIDATION SCAN ERROR]', error);
@@ -6751,7 +6751,7 @@ app.post('/api/admin/validation/scan', authenticateToken, requireRole(['SUPER_AD
 
 app.get('/api/admin/validation/quick-check', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   try {
-    const report = await validateRecordRelationships(dbState, { scanFirestore: false });
+    const report = await validateRecordRelationships(dbState, { scanDatabase: true });
     res.json({
       status: report.overallStatus,
       totalIssues: report.stats.totalIssuesFound,
@@ -7989,10 +7989,11 @@ app.get('/api/admin/users', (req, res) => {
 });
 
 app.post('/api/admin/users', async (req, res) => {
-  const { user, updaterId, updaterName, updaterRole } = req.body;
+  const user = req.body.user || req.body;
+  const { updaterId, updaterName, updaterRole } = req.body;
   if (!user || !user.name || !user.email) return res.status(400).json({ message: 'Name and email are required' });
   
-  const normalizedEmail = user.email.toLowerCase().trim();
+  const normalizedEmail = String(user.email).toLowerCase().trim();
   const exists = dbState.users.some(u => u.email.toLowerCase().trim() === normalizedEmail);
   if (exists) return res.status(400).json({ message: 'A user with this email already exists' });
 
@@ -8039,65 +8040,155 @@ app.post('/api/admin/users', async (req, res) => {
 });
 
 app.put('/api/admin/users/:id', async (req, res) => {
-  const { user, updaterId, updaterName, updaterRole } = req.body;
-  const idx = dbState.users.findIndex(u => u.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'User not found' });
+  const user = req.body.user || req.body;
+  const { updaterId, updaterName, updaterRole } = req.body;
+  const paramId = String(req.params.id);
+  const targetEmail = (user?.email || '').toLowerCase().trim();
+
+  let idx = dbState.users.findIndex(u => String(u.id) === paramId || (targetEmail && u.email && u.email.toLowerCase().trim() === targetEmail));
+  
+  if (idx === -1) {
+    const adminMatch = dbState.admins?.find((a: any) => String(a.id) === paramId || (targetEmail && a.email && a.email.toLowerCase().trim() === targetEmail));
+    const custMatch = dbState.customers?.find((c: any) => String(c.id) === paramId || (targetEmail && c.email && c.email.toLowerCase().trim() === targetEmail));
+    
+    if (adminMatch) {
+      dbState.users.push({
+        id: adminMatch.id || paramId,
+        name: adminMatch.name || 'Admin',
+        email: adminMatch.email,
+        mobile: adminMatch.mobile || '',
+        role: adminMatch.role || 'ADMIN',
+        createdAt: adminMatch.createdAt || new Date().toISOString(),
+        isSuspended: adminMatch.status === 'Suspended',
+        password: adminMatch.password || DEFAULT_PASSWORD_HASH
+      });
+      idx = dbState.users.length - 1;
+    } else if (custMatch) {
+      dbState.users.push({
+        id: custMatch.id || paramId,
+        name: custMatch.name || 'Customer',
+        email: custMatch.email,
+        mobile: custMatch.mobile || '',
+        role: 'USER',
+        createdAt: custMatch.createdAt || new Date().toISOString(),
+        isSuspended: !!custMatch.isSuspended,
+        password: custMatch.password || DEFAULT_PASSWORD_HASH
+      });
+      idx = dbState.users.length - 1;
+    } else {
+      return res.status(404).json({ message: 'User not found' });
+    }
+  }
   
   const current = dbState.users[idx];
-  const targetEmail = (user.email || current.email).toLowerCase().trim();
+  const finalEmail = (user.email || current.email || '').toLowerCase().trim();
 
   // Protect the primary Super Admin
-  if (current.email.toLowerCase().trim() === 'tideepak8@gmail.com') {
+  if (current.email?.toLowerCase().trim() === 'tideepak8@gmail.com' || current.id === 'super-admin-deepak') {
     user.role = 'SUPER_ADMIN';
     user.isSuspended = false;
-  } else if (user.role === 'SUPER_ADMIN' && targetEmail !== 'tideepak8@gmail.com') {
+  } else if (user.role === 'SUPER_ADMIN' && finalEmail !== 'tideepak8@gmail.com') {
     user.role = 'ADMIN';
   }
 
   dbState.users[idx] = { ...dbState.users[idx], ...user };
+  const updatedUser = dbState.users[idx];
 
   // Sync with admins collection
-  if (Array.isArray(dbState.admins)) {
-    const adminIdx = dbState.admins.findIndex(a => a.id === req.params.id || a.email.toLowerCase().trim() === targetEmail);
+  if (!Array.isArray(dbState.admins)) dbState.admins = [];
+  const adminIdx = dbState.admins.findIndex(a => String(a.id) === paramId || (finalEmail && a.email?.toLowerCase().trim() === finalEmail));
+
+  if (['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'STAFF'].includes(updatedUser.role)) {
     if (adminIdx >= 0) {
-      dbState.admins[adminIdx].name = dbState.users[idx].name;
-      dbState.admins[adminIdx].email = dbState.users[idx].email;
-      dbState.admins[adminIdx].mobile = dbState.users[idx].mobile;
-      dbState.admins[adminIdx].role = dbState.users[idx].role;
-      dbState.admins[adminIdx].status = dbState.users[idx].isSuspended ? 'Suspended' : 'Active';
+      dbState.admins[adminIdx].name = updatedUser.name;
+      dbState.admins[adminIdx].email = updatedUser.email;
+      dbState.admins[adminIdx].mobile = updatedUser.mobile;
+      dbState.admins[adminIdx].role = updatedUser.role;
+      dbState.admins[adminIdx].status = updatedUser.isSuspended ? 'Suspended' : 'Active';
       await persistDatabase('admins', dbState.admins[adminIdx].id);
+    } else {
+      const newAdminEntry = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        mobile: updatedUser.mobile || '',
+        role: updatedUser.role,
+        status: updatedUser.isSuspended ? 'Suspended' : 'Active',
+        permissions: updatedUser.role === 'SUPER_ADMIN' ? ['*'] : [],
+        password: updatedUser.password || DEFAULT_PASSWORD_HASH,
+        createdAt: updatedUser.createdAt || new Date().toISOString()
+      };
+      dbState.admins.push(newAdminEntry);
+      await persistDatabase('admins', newAdminEntry.id);
+    }
+  } else if (adminIdx >= 0 && finalEmail !== 'tideepak8@gmail.com') {
+    // Demoted from admin to standard user
+    const removedAdminId = dbState.admins[adminIdx].id;
+    dbState.admins.splice(adminIdx, 1);
+    await persistDatabase('admins', removedAdminId);
+  }
+
+  // Sync with customers collection
+  if (updatedUser.role === 'USER') {
+    if (!Array.isArray(dbState.customers)) dbState.customers = [];
+    const custIdx = dbState.customers.findIndex(c => String(c.id) === paramId || (finalEmail && c.email?.toLowerCase().trim() === finalEmail));
+    if (custIdx >= 0) {
+      dbState.customers[custIdx].name = updatedUser.name;
+      dbState.customers[custIdx].email = updatedUser.email;
+      dbState.customers[custIdx].mobile = updatedUser.mobile;
+      dbState.customers[custIdx].isSuspended = updatedUser.isSuspended;
+      await persistDatabase('customers', dbState.customers[custIdx].id);
+    } else {
+      const newCust = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        mobile: updatedUser.mobile || '',
+        isSuspended: !!updatedUser.isSuspended,
+        isVerified: true,
+        password: updatedUser.password || DEFAULT_PASSWORD_HASH,
+        createdAt: updatedUser.createdAt || new Date().toISOString()
+      };
+      dbState.customers.push(newCust);
+      await persistDatabase('customers', newCust.id);
     }
   }
 
-  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_UPDATE', `Updated user/admin profile: ${dbState.users[idx].name} (Role: ${dbState.users[idx].role})`);
-  await persistDatabase('users', req.params.id);
-  res.json(dbState.users[idx]);
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_UPDATE', `Updated user/admin profile: ${updatedUser.name} (Role: ${updatedUser.role})`);
+  await persistDatabase('users', updatedUser.id);
+  res.json(updatedUser);
 });
 
 app.delete('/api/admin/users/:id', async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body;
-  const targetUser = dbState.users.find(u => u.id === req.params.id);
+  const paramId = String(req.params.id);
+  
+  let targetUser = dbState.users.find(u => String(u.id) === paramId);
+  if (!targetUser) {
+    targetUser = dbState.admins?.find((a: any) => String(a.id) === paramId) || dbState.customers?.find((c: any) => String(c.id) === paramId);
+  }
   if (!targetUser) return res.status(404).json({ message: 'User not found' });
   
   // Prevent deleting the primary Super Admin
-  if (targetUser.email.toLowerCase().trim() === 'tideepak8@gmail.com' || targetUser.id === 'super-admin-deepak') {
+  if (targetUser.email && (targetUser.email.toLowerCase().trim() === 'tideepak8@gmail.com' || targetUser.id === 'super-admin-deepak')) {
     return res.status(403).json({ message: 'The primary Super Admin account (Deepak) is protected and cannot be deleted.' });
   }
 
-  dbState.users = dbState.users.filter(u => u.id !== req.params.id);
+  const userEmail = (targetUser.email || '').toLowerCase().trim();
+  dbState.users = dbState.users.filter(u => String(u.id) !== paramId && (!userEmail || u.email?.toLowerCase().trim() !== userEmail));
   
   // Also remove from admins and customers if present
   if (Array.isArray(dbState.admins)) {
-    dbState.admins = dbState.admins.filter(a => a.id !== req.params.id && a.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim());
-    await persistDatabase('admins', req.params.id);
+    dbState.admins = dbState.admins.filter(a => String(a.id) !== paramId && (!userEmail || a.email?.toLowerCase().trim() !== userEmail));
+    await persistDatabase('admins', paramId);
   }
   if (Array.isArray(dbState.customers)) {
-    dbState.customers = dbState.customers.filter(c => c.id !== req.params.id && c.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim());
-    await persistDatabase('customers', req.params.id);
+    dbState.customers = dbState.customers.filter(c => String(c.id) !== paramId && (!userEmail || c.email?.toLowerCase().trim() !== userEmail));
+    await persistDatabase('customers', paramId);
   }
 
-  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_DELETE', `Permanently deleted user record: ${targetUser.name}`);
-  await persistDatabase('users', req.params.id);
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_DELETE', `Permanently deleted user record: ${targetUser.name || paramId}`);
+  await persistDatabase('users', paramId);
   res.json({ message: 'User deleted successfully' });
 });
 

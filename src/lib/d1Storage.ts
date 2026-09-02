@@ -31,6 +31,102 @@ export function getR2Storage(env?: CloudflareEnv): any | null {
   return env?.STORAGE || activeEnv?.STORAGE || (globalThis as any)?.CLOUDFLARE_ENV?.STORAGE || null;
 }
 
+export const OBJECT_COLLECTIONS = new Set([
+  'employeeAccounts',
+  'employeeKYC',
+  'employeePayroll'
+]);
+
+export const ENTITY_COLLECTIONS = [
+  'services',
+  'categories',
+  'blogCategories',
+  'blogs',
+  'customers',
+  'admins',
+  'roles',
+  'permissions',
+  'employees',
+  'employeeKYC',
+  'employeePayroll',
+  'employeeAccounts',
+  'employeeDocuments',
+  'orders',
+  'tickets',
+  'reviews',
+  'faqs',
+  'banners',
+  'calendarEvents',
+  'pages',
+  'media',
+  'notifications',
+  'users',
+  'auditLogs',
+  'coupons',
+  'contactMessages',
+  'scamReports',
+  'dataDeletionRequests',
+  'team',
+  'systemBackups'
+] as const;
+
+export const SETTING_KEYS = [
+  'system_init',
+  'aboutUs',
+  'founder',
+  'companyProfile',
+  'contactSettings',
+  'paymentConfig',
+  'paymentSettings',
+  'privacySecuritySettings',
+  'privacySecurity',
+  'settings',
+  'maintenanceMode',
+  'masterData',
+  'chatConfig'
+] as const;
+
+/**
+ * Sanitizes and fills default values for payment configuration.
+ */
+export function sanitizePaymentConfig(raw?: any): any {
+  const fallback = {
+    upiId: 'easydesk@ybl',
+    upiName: 'EasyDesk Digital Services',
+    qrCodeUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=300',
+    bankAccountName: 'EasyDesk Solutions Pvt Ltd',
+    bankName: 'HDFC Bank',
+    bankAccountNumber: '50200088991122',
+    bankIfsc: 'HDFC0001234',
+    bankBranch: 'Nariman Point, Mumbai',
+    acceptUpi: true,
+    acceptNetBanking: true,
+    acceptQrCode: true,
+    convenienceFeePercentage: 0,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return fallback;
+  }
+
+  return {
+    upiId: (raw.upiId && String(raw.upiId).trim()) || fallback.upiId,
+    upiName: (raw.upiName && String(raw.upiName).trim()) || fallback.upiName,
+    qrCodeUrl: (raw.qrCodeUrl && String(raw.qrCodeUrl).trim()) || fallback.qrCodeUrl,
+    bankAccountName: (raw.bankAccountName && String(raw.bankAccountName).trim()) || fallback.bankAccountName,
+    bankName: (raw.bankName && String(raw.bankName).trim()) || fallback.bankName,
+    bankAccountNumber: (raw.bankAccountNumber && String(raw.bankAccountNumber).trim()) || fallback.bankAccountNumber,
+    bankIfsc: (raw.bankIfsc && String(raw.bankIfsc).trim()) || fallback.bankIfsc,
+    bankBranch: (raw.bankBranch && String(raw.bankBranch).trim()) || fallback.bankBranch,
+    acceptUpi: raw.acceptUpi !== undefined ? Boolean(raw.acceptUpi) : fallback.acceptUpi,
+    acceptNetBanking: raw.acceptNetBanking !== undefined ? Boolean(raw.acceptNetBanking) : fallback.acceptNetBanking,
+    acceptQrCode: raw.acceptQrCode !== undefined ? Boolean(raw.acceptQrCode) : fallback.acceptQrCode,
+    convenienceFeePercentage: typeof raw.convenienceFeePercentage === 'number' ? raw.convenienceFeePercentage : fallback.convenienceFeePercentage,
+    updatedAt: raw.updatedAt || fallback.updatedAt
+  };
+}
+
 /**
  * Ensures D1 tables and indexes exist.
  */
@@ -132,8 +228,17 @@ export async function loadStateFromD1(dbInstance?: any): Promise<{
       if (!row || !row.collection || !row.id || !row.data) continue;
       try {
         const parsed = JSON.parse(row.data);
-        if (!state[row.collection]) state[row.collection] = [];
-        state[row.collection].push(parsed);
+        if (OBJECT_COLLECTIONS.has(row.collection)) {
+          if (!state[row.collection] || Array.isArray(state[row.collection])) {
+            state[row.collection] = {};
+          }
+          state[row.collection][row.id] = parsed;
+        } else {
+          if (!state[row.collection] || !Array.isArray(state[row.collection])) {
+            state[row.collection] = [];
+          }
+          state[row.collection].push(parsed);
+        }
         totalDocsLoaded++;
       } catch {}
     }
@@ -154,14 +259,22 @@ export async function loadStateFromD1(dbInstance?: any): Promise<{
 /**
  * Saves a single entity document directly into Cloudflare D1.
  */
+export interface D1WriteResult {
+  success: boolean;
+  changes: number;
+  error?: string;
+}
+
 export async function saveEntityToD1(
   collectionName: string, 
   docId: string, 
   data: any, 
   dbInstance?: any
-): Promise<boolean> {
+): Promise<D1WriteResult> {
   const db = dbInstance || getD1Database();
-  if (!db || !collectionName || !docId || !data) return false;
+  if (!db || !collectionName || !docId || data === undefined) {
+    return { success: false, changes: 0, error: 'Missing database or arguments' };
+  }
 
   try {
     await initD1Schema(db);
@@ -176,11 +289,19 @@ export async function saveEntityToD1(
         updated_at = excluded.updated_at
     `);
 
-    await stmt.bind(collectionName, String(docId), jsonStr, now, now).run();
-    return true;
-  } catch (err) {
+    const runRes = await stmt.bind(collectionName, String(docId), jsonStr, now, now).run();
+    const changes = runRes?.meta?.changes ?? (runRes?.changes !== undefined ? runRes.changes : 1);
+    const isSuccess = runRes?.success !== false;
+
+    if (!isSuccess) {
+      console.error(`[D1 WRITE ERROR] saveEntityToD1 failed for ${collectionName}/${docId}:`, runRes?.error || 'Unknown error');
+      return { success: false, changes: 0, error: String(runRes?.error || 'D1 operation failed') };
+    }
+
+    return { success: true, changes: Math.max(1, changes) };
+  } catch (err: any) {
     console.error(`[D1] Error saving entity ${collectionName}/${docId}:`, err);
-    return false;
+    return { success: false, changes: 0, error: err?.message || String(err) };
   }
 }
 
@@ -191,18 +312,28 @@ export async function deleteEntityFromD1(
   collectionName: string, 
   docId: string, 
   dbInstance?: any
-): Promise<boolean> {
+): Promise<D1WriteResult> {
   const db = dbInstance || getD1Database();
-  if (!db || !collectionName || !docId) return false;
+  if (!db || !collectionName || !docId) {
+    return { success: false, changes: 0, error: 'Missing database or arguments' };
+  }
 
   try {
     await initD1Schema(db);
     const stmt = db.prepare('DELETE FROM entities WHERE collection = ? AND id = ?');
-    await stmt.bind(collectionName, String(docId)).run();
-    return true;
-  } catch (err) {
+    const runRes = await stmt.bind(collectionName, String(docId)).run();
+    const changes = runRes?.meta?.changes ?? (runRes?.changes !== undefined ? runRes.changes : 1);
+    const isSuccess = runRes?.success !== false;
+
+    if (!isSuccess) {
+      console.error(`[D1 DELETE ERROR] deleteEntityFromD1 failed for ${collectionName}/${docId}:`, runRes?.error || 'Unknown error');
+      return { success: false, changes: 0, error: String(runRes?.error || 'D1 operation failed') };
+    }
+
+    return { success: true, changes };
+  } catch (err: any) {
     console.error(`[D1] Error deleting entity ${collectionName}/${docId}:`, err);
-    return false;
+    return { success: false, changes: 0, error: err?.message || String(err) };
   }
 }
 
@@ -213,9 +344,11 @@ export async function saveSettingToD1(
   key: string, 
   data: any, 
   dbInstance?: any
-): Promise<boolean> {
+): Promise<D1WriteResult> {
   const db = dbInstance || getD1Database();
-  if (!db || !key || data === undefined) return false;
+  if (!db || !key || data === undefined) {
+    return { success: false, changes: 0, error: 'Missing database or arguments' };
+  }
 
   try {
     await initD1Schema(db);
@@ -230,10 +363,88 @@ export async function saveSettingToD1(
         updated_at = excluded.updated_at
     `);
 
-    await stmt.bind(key, jsonStr, now).run();
+    const runRes = await stmt.bind(key, jsonStr, now).run();
+    const changes = runRes?.meta?.changes ?? (runRes?.changes !== undefined ? runRes.changes : 1);
+    const isSuccess = runRes?.success !== false;
+
+    if (!isSuccess) {
+      console.error(`[D1 WRITE ERROR] saveSettingToD1 failed for ${key}:`, runRes?.error || 'Unknown error');
+      return { success: false, changes: 0, error: String(runRes?.error || 'D1 operation failed') };
+    }
+
+    return { success: true, changes: Math.max(1, changes) };
+  } catch (err: any) {
+    console.error(`[D1] Error saving setting ${key}:`, err);
+    return { success: false, changes: 0, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Synchronizes an entire collection to D1, upserting active items and deleting purged items.
+ */
+export async function syncCollectionToD1(
+  collectionName: string, 
+  currentItems: any[], 
+  dbInstance?: any
+): Promise<boolean> {
+  const db = dbInstance || getD1Database();
+  if (!db || !collectionName) return false;
+
+  try {
+    await initD1Schema(db);
+    const now = Date.now();
+    const validIds = new Set<string>();
+
+    const stmts: any[] = [];
+    for (const item of (currentItems || [])) {
+      if (!item || (!item.id && !item.code)) continue;
+      const docId = String(item.id || item.code);
+      validIds.add(docId);
+      const stmt = db.prepare(`
+        INSERT INTO entities (collection, id, data, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?) 
+        ON CONFLICT(collection, id) DO UPDATE SET 
+          data = excluded.data, 
+          updated_at = excluded.updated_at
+      `);
+      stmts.push(stmt.bind(collectionName, docId, JSON.stringify(item), now, now));
+    }
+
+    // Execute saves in batches of 50
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
+      const batch = stmts.slice(i, i + BATCH_SIZE);
+      if (typeof db.batch === 'function') {
+        await db.batch(batch);
+      } else {
+        for (const s of batch) await s.run();
+      }
+    }
+
+    // Delete any entities in D1 that no longer exist in currentItems
+    const existingRes = await db.prepare('SELECT id FROM entities WHERE collection = ?').bind(collectionName).all();
+    const existingRows = (existingRes && existingRes.results) ? existingRes.results : (Array.isArray(existingRes) ? existingRes : []);
+    const deleteStmts: any[] = [];
+    for (const row of existingRows) {
+      if (row && row.id && !validIds.has(String(row.id))) {
+        deleteStmts.push(db.prepare('DELETE FROM entities WHERE collection = ? AND id = ?').bind(collectionName, String(row.id)));
+      }
+    }
+
+    if (deleteStmts.length > 0) {
+      for (let i = 0; i < deleteStmts.length; i += BATCH_SIZE) {
+        const delBatch = deleteStmts.slice(i, i + BATCH_SIZE);
+        if (typeof db.batch === 'function') {
+          await db.batch(delBatch);
+        } else {
+          for (const s of delBatch) await s.run();
+        }
+      }
+    }
+
     return true;
   } catch (err) {
-    console.error(`[D1] Error saving setting ${key}:`, err);
+    console.error(`[D1] Error syncing collection ${collectionName}:`, err);
     return false;
   }
 }
@@ -278,6 +489,7 @@ export async function seedD1FromState(initialState: Record<string, any>, dbInsta
     // 1. Settings
     for (const [key, val] of Object.entries(initialState)) {
       if (Array.isArray(val)) continue;
+      if (OBJECT_COLLECTIONS.has(key)) continue;
       if (val && typeof val === 'object') {
         const stmt = db.prepare(`
           INSERT INTO system_settings (key, data, updated_at) VALUES (?, ?, ?)
@@ -294,16 +506,27 @@ export async function seedD1FromState(initialState: Record<string, any>, dbInsta
     `);
     statements.push(initStmt.bind('system_init', JSON.stringify({ initializedAt: new Date().toISOString(), version: 'd1_v1' }), now));
 
-    // 2. Collections
+    // 2. Collections (Arrays and Dictionary Objects)
     for (const [collName, items] of Object.entries(initialState)) {
-      if (!Array.isArray(items)) continue;
-      for (const item of items) {
-        if (!item || !item.id) continue;
-        const stmt = db.prepare(`
-          INSERT INTO entities (collection, id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-        `);
-        statements.push(stmt.bind(collName, String(item.id), JSON.stringify(item), now, now));
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          if (!item || (!item.id && !item.code)) continue;
+          const docId = String(item.id || item.code);
+          const stmt = db.prepare(`
+            INSERT INTO entities (collection, id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+          `);
+          statements.push(stmt.bind(collName, docId, JSON.stringify(item), now, now));
+        }
+      } else if (items && typeof items === 'object' && OBJECT_COLLECTIONS.has(collName)) {
+        for (const [docId, item] of Object.entries(items)) {
+          if (!item) continue;
+          const stmt = db.prepare(`
+            INSERT INTO entities (collection, id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+          `);
+          statements.push(stmt.bind(collName, String(docId), JSON.stringify(item), now, now));
+        }
       }
     }
 

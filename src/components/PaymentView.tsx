@@ -86,7 +86,7 @@ export default function PaymentView({
         }
       }
 
-      // Authoritative Direct Firestore fallback
+      // Authoritative Direct API Fallback
       try {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directPay = await getClientPaymentConfig();
@@ -102,7 +102,7 @@ export default function PaymentView({
         }
       } catch (fsErr: any) {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-          console.warn('Failed to load direct Firestore payment config:', fsErr?.message || fsErr);
+          console.warn('Failed to load direct fallback payment config:', fsErr?.message || fsErr);
         }
       }
     };

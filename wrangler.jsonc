@@ -12,6 +12,19 @@
   "vars": {
     "NODE_ENV": "production"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "easydesk-prod-db",
+      "database_id": "easydesk-prod-db"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "STORAGE",
+      "bucket_name": "easydesk-prod-storage"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -1,90 +1,93 @@
-import { ServiceCategory, BlogCategory, Service, Blog, Review } from '../types';
-import { safeParseJsonResponse } from '../lib/apiClient';
+/**
+ * Catalog Service for EasyDesk
+ * Standardized caching & resilient data fetching for services, categories, blogs, and reviews.
+ * 100% powered by Cloudflare Worker API (/api/*) and Cloudflare D1/R2.
+ */
+
+import { Service, ServiceCategory, Blog, BlogCategory, Review } from '../types';
 import { 
   getClientServices, 
   getClientCategories, 
   getClientBlogCategories, 
   getClientBlogs, 
   getClientReviews 
-} from '../lib/firestoreClientService';
+} from '../lib/apiDataService';
 
 export const CATALOG_CACHE_KEYS = {
-  CATEGORIES: 'easydesk_cache_categories',
-  CATEGORIES_ALL: 'easydesk_cache_categories_all',
-  BLOG_CATEGORIES: 'easydesk_cache_blog_categories',
-  BLOG_CATEGORIES_ALL: 'easydesk_cache_blog_categories_all',
-  SERVICES: 'easydesk_cache_services',
-  BLOGS: 'easydesk_cache_blogs',
-  REVIEWS: 'easydesk_cache_reviews',
+  CATEGORIES: 'easydesk_cache_categories_v2',
+  CATEGORIES_ALL: 'easydesk_cache_categories_all_v2',
+  BLOG_CATEGORIES: 'easydesk_cache_blog_categories_v2',
+  BLOG_CATEGORIES_ALL: 'easydesk_cache_blog_categories_all_v2',
+  SERVICES: 'easydesk_cache_services_v2',
+  BLOGS: 'easydesk_cache_blogs_v2',
+  REVIEWS: 'easydesk_cache_reviews_v2',
   LAST_UPDATED: 'easydesk_cache_last_updated'
-};
+} as const;
 
-function sanitizeCachedData<T>(key: string, data: T): T {
-  if (!Array.isArray(data)) return data;
-  // Ensure array elements are valid objects with IDs
-  const cleaned = data.filter((item: any) => item && typeof item === 'object' && item.id);
-  return cleaned as unknown as T;
+export interface FetchResult<T> {
+  data: T;
+  isCached: boolean;
 }
 
-// Safely initialize cache versioning
-(function purgeLegacyDemoCaches() {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+/**
+ * Safely parse JSON from a response, handling empty body or HTML error pages
+ */
+export async function safeParseJsonResponse<T>(res: Response): Promise<T | null> {
   try {
-    const purgedFlag = localStorage.getItem('easydesk_cache_synced_v7');
-    if (!purgedFlag) {
-      localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOGS);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.REVIEWS);
-      localStorage.removeItem(CATALOG_CACHE_KEYS.LAST_UPDATED);
-      localStorage.setItem('easydesk_cache_synced_v7', 'true');
-    }
-  } catch {}
-})();
+    const text = await res.text();
+    if (!text || text.trim() === '') return null;
+    return JSON.parse(text) as T;
+  } catch (err) {
+    console.warn('[CatalogService] Failed to parse JSON response:', err);
+    return null;
+  }
+}
 
 /**
- * Reads cached data from localStorage safely.
+ * Returns cached catalog data from localStorage if available, or fallback.
  */
 export function getCachedCatalog<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(fallback) && !Array.isArray(parsed)) {
-      return fallback;
-    }
-    const sanitized = sanitizeCachedData<T>(key, parsed as T);
-    return sanitized;
+    const item = localStorage.getItem(key);
+    if (!item) return fallback;
+    const parsed = JSON.parse(item);
+    return parsed !== null && parsed !== undefined ? (parsed as T) : fallback;
   } catch (err) {
-    console.warn(`[CatalogService] Error reading cache for ${key}:`, err);
+    console.warn(`[CatalogService] Error reading cache key "${key}":`, err);
     return fallback;
   }
 }
 
 /**
- * Saves data to localStorage cache safely.
+ * Writes catalog data to localStorage cache.
  */
 export function setCachedCatalog<T>(key: string, data: T): void {
   try {
-    const sanitized = sanitizeCachedData<T>(key, data);
-    localStorage.setItem(key, JSON.stringify(sanitized));
-    localStorage.setItem(CATALOG_CACHE_KEYS.LAST_UPDATED, new Date().toISOString());
+    if (data !== undefined && data !== null) {
+      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(CATALOG_CACHE_KEYS.LAST_UPDATED, Date.now().toString());
+    }
   } catch (err) {
-    console.warn(`[CatalogService] Error writing cache for ${key}:`, err);
+    console.warn(`[CatalogService] Error writing cache key "${key}":`, err);
   }
 }
 
-export interface FetchResult<T> {
-  data: T;
-  isCached: boolean;
-  error?: string;
+/**
+ * Clears category caches from localStorage.
+ */
+export function invalidateCategoriesCache(): void {
+  try {
+    localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
+    localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
+    localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
+    localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
+  } catch (err) {
+    console.warn('[CatalogService] Error clearing categories cache:', err);
+  }
 }
 
 /**
- * Clears cached reviews from localStorage to force immediate refetch.
+ * Clears review caches from localStorage.
  */
 export function invalidateReviewsCache(): void {
   try {
@@ -95,16 +98,24 @@ export function invalidateReviewsCache(): void {
 }
 
 /**
- * Clears all category caches (both active and all) to force immediate refetch across admin and client.
+ * Clears services caches from localStorage.
  */
-export function invalidateCategoriesCache(): void {
+export function invalidateServicesCache(): void {
   try {
-    localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
-    localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
-    localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
-    localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
+    localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
   } catch (err) {
-    console.warn('[CatalogService] Error clearing categories cache:', err);
+    console.warn('[CatalogService] Error clearing services cache:', err);
+  }
+}
+
+/**
+ * Clears blogs caches from localStorage.
+ */
+export function invalidateBlogsCache(): void {
+  try {
+    localStorage.removeItem(CATALOG_CACHE_KEYS.BLOGS);
+  } catch (err) {
+    console.warn('[CatalogService] Error clearing blogs cache:', err);
   }
 }
 
@@ -127,13 +138,13 @@ export function invalidateAllCatalogsCache(): void {
 }
 
 /**
- * Fetches data from a network endpoint with direct Firestore database fallback.
+ * Fetches data from a network endpoint with API client proxy fallback and cache support.
  */
 export async function fetchWithCache<T>(
   endpoint: string,
   cacheKey: string,
   fallback: T,
-  directFirestoreLoader?: () => Promise<T | null>
+  apiDataServiceLoader?: () => Promise<T | null>
 ): Promise<FetchResult<T>> {
   try {
     const url = endpoint.includes('?') ? `${endpoint}&_t=${Date.now()}` : `${endpoint}?_t=${Date.now()}`;
@@ -152,34 +163,29 @@ export async function fetchWithCache<T>(
         setCachedCatalog(cacheKey, data);
         return { data, isCached: false };
       }
-    } else if (res.status === 404) {
-      // Gracefully handle 404: Endpoint not found or resource missing, fallback to Firestore/cache
-      if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-        console.info(`[CatalogService] Endpoint ${endpoint} returned 404. Falling back to direct database and cached state.`);
-      }
     }
   } catch (err: any) {
     const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
     if (!isOffline) {
-      console.warn(`[CatalogService] Network fetch failed for ${endpoint}. Checking Cloud Firestore directly.`, err?.message || err);
+      console.warn(`[CatalogService] Network fetch failed for ${endpoint}:`, err?.message || err);
     }
   }
 
-  // Authoritative Direct Firestore Fallback
-  if (directFirestoreLoader && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
+  // API Data Service Fallback
+  if (apiDataServiceLoader && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
     try {
-      const firestoreData = await directFirestoreLoader();
-      if (firestoreData !== null && firestoreData !== undefined) {
-        const isArray = Array.isArray(firestoreData);
-        if (!isArray || firestoreData.length > 0) {
-          setCachedCatalog(cacheKey, firestoreData);
-          return { data: firestoreData, isCached: false };
+      const apiData = await apiDataServiceLoader();
+      if (apiData !== null && apiData !== undefined) {
+        const isArray = Array.isArray(apiData);
+        if (!isArray || apiData.length > 0) {
+          setCachedCatalog(cacheKey, apiData);
+          return { data: apiData, isCached: false };
         }
       }
-    } catch (fsErr: any) {
+    } catch (apiErr: any) {
       const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
       if (!isOffline) {
-        console.warn(`[CatalogService] Direct Firestore fetch failed for ${cacheKey}:`, fsErr?.message || fsErr);
+        console.warn(`[CatalogService] API Data Service fetch failed for ${cacheKey}:`, apiErr?.message || apiErr);
       }
     }
   }
@@ -306,4 +312,3 @@ export async function fetchAllCatalogsWithCache(): Promise<FetchAllCatalogsResul
     errors
   };
 }
-

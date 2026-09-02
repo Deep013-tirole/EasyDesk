@@ -74,14 +74,14 @@ export default function AuthPortal({
         }
       }
 
-      // 2. Direct Cloud Firestore Authoritative Authentication Fallback
+      // 2. Direct Authoritative Authentication Fallback via API Service
       const directResult = await authenticateAdminDirect(cleanEmail, cleanPassword);
       if (directResult.success && directResult.user && directResult.token) {
         localStorage.setItem('easydesk_admin_token', directResult.token);
         localStorage.setItem('easydesk_admin_user', JSON.stringify(directResult.user));
 
         setCurrentUser(directResult.user);
-        setSuccess(`Welcome back, ${directResult.user.name || 'Admin'}! Verified via Authoritative Cloud Firestore. Redirecting...`);
+        setSuccess(`Welcome back, ${directResult.user.name || 'Admin'}! Verified successfully. Redirecting...`);
         
         setTimeout(() => {
           setView('admin');

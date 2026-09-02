@@ -160,7 +160,7 @@ export default function HomeView({
         }
       } catch {}
 
-      // Firestore fallback
+      // Authoritative Direct API Fallback
       try {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directFaqs = await getClientFaqs();

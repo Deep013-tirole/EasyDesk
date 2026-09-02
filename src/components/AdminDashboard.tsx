@@ -337,7 +337,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
         }
       }
 
-      // 2. Direct Cloud Firestore Authoritative Authentication Fallback
+      // 2. Direct Authoritative Authentication Fallback via API Service
       const directResult = await authenticateAdminDirect(cleanEmail, password);
       if (directResult.success && directResult.user && directResult.token) {
         setAdminUser(directResult.user);
@@ -522,7 +522,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
         );
       }
 
-      if (hasPermission(['staff_accounts.view', 'staff_accounts.manage', 'customers.view', 'customers.manage'])) {
+      if (hasPermission(['staff_accounts.view', 'staff_accounts.manage', 'customers.view', 'customers.manage']) || isSuper || adminUser?.role === 'SUPER_ADMIN' || adminUser?.role === 'ADMIN') {
         fetchTasks.push(
           adminFetch('/api/admin/users')
             .then(res => res.ok ? res.json() : null)
@@ -717,7 +717,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       serviceCharge: item.serviceCharge || 0,
       processingTime: item.processingTime || item.estimatedTime || '',
       requiredDocuments: Array.isArray(item.requiredDocuments) ? item.requiredDocuments.join(', ') : item.requiredDocuments || '',
-      status: item.status || 'active',
+      status: item.isSuspended ? 'suspended' : (item.status ? String(item.status).toLowerCase() : 'active'),
       imageUrl: item.imageUrl || item.image || '',
       linkUrl: item.linkUrl || '',
       tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '',

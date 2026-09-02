@@ -69,7 +69,7 @@ export default function ReviewSubmissionForm({
         }
       } catch {}
 
-      // Direct Firestore fallback on 404 or network failure
+      // Direct API service fallback on 404 or network failure
       try {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const fsServices = await getClientServices();
@@ -161,7 +161,7 @@ export default function ReviewSubmissionForm({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to save review to Firestore.');
+        throw new Error(data.message || 'Failed to save review to database.');
       }
 
       setSubmittedReview(data.review);
@@ -198,7 +198,7 @@ export default function ReviewSubmissionForm({
             Status: {submittedReview.status || 'Pending'}
           </div>
           <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Review Submitted to Firestore!
+            Review Submitted!
           </h3>
           <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
             Your review has been securely attached and saved with a <span className="font-semibold text-amber-700">Pending</span> moderation status.
@@ -307,7 +307,7 @@ export default function ReviewSubmissionForm({
           Share Your Service Experience
         </h2>
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-          Submit verified feedback attached to your specific customer and order records. Reviews are stored in Firestore with a <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Pending</span> status.
+          Submit verified feedback attached to your specific customer and order records. Reviews are stored in the database with a <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Pending</span> status.
         </p>
       </div>
 
@@ -470,10 +470,10 @@ export default function ReviewSubmissionForm({
         {/* Summary of Metadata Attachment */}
         <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-3.5 text-xs text-blue-900 space-y-1">
           <div className="flex items-center gap-1.5 font-bold text-xs text-[#0F4C81]">
-            <ShieldCheck className="w-4 h-4 text-[#0F4C81]" /> Firestore Direct Persistence Notice
+            <ShieldCheck className="w-4 h-4 text-[#0F4C81]" /> D1 Database Direct Persistence Notice
           </div>
           <p className="text-[11px] text-slate-600 leading-snug">
-            This submission automatically binds <span className="font-semibold text-slate-900">{customerId || '[customerId]'}</span>, order <span className="font-semibold text-slate-900">{orderId || '[orderId]'}</span>, and service <span className="font-semibold text-slate-900">{serviceId || '[serviceId]'}</span> together in Cloud Firestore with initial status <span className="font-bold text-amber-700">"Pending"</span>.
+            This submission automatically binds <span className="font-semibold text-slate-900">{customerId || '[customerId]'}</span>, order <span className="font-semibold text-slate-900">{orderId || '[orderId]'}</span>, and service <span className="font-semibold text-slate-900">{serviceId || '[serviceId]'}</span> together in Cloudflare D1 with initial status <span className="font-bold text-amber-700">"Pending"</span>.
           </p>
         </div>
 
@@ -497,7 +497,7 @@ export default function ReviewSubmissionForm({
             {submitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Saving to Firestore...
+                Saving to Database...
               </>
             ) : (
               <>

@@ -265,25 +265,25 @@ export default function PrivacySecurityView({ setView }: { setView?: (v: string)
         }
       } catch (err: any) {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-          console.warn('API fetch for privacy-security failed, trying direct Firestore:', err?.message || err);
+          console.warn('API fetch for privacy-security failed, trying direct fallback:', err?.message || err);
         }
       }
 
-      // 2. Direct Firestore Authoritative Read Fallback
+      // 2. Direct Authoritative Read Fallback via API Service
       try {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-          const firestoreData = await getClientPrivacySecurity();
-          if (firestoreData && firestoreData.hero) {
-            setData(firestoreData);
+          const fallbackData = await getClientPrivacySecurity();
+          if (fallbackData && fallbackData.hero) {
+            setData(fallbackData);
             try {
-              localStorage.setItem('easydesk_cache_privacy_security', JSON.stringify(firestoreData));
+              localStorage.setItem('easydesk_cache_privacy_security', JSON.stringify(fallbackData));
             } catch {}
             return;
           }
         }
       } catch (fsErr: any) {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-          console.warn('Direct Firestore fetch for privacy-security failed:', fsErr?.message || fsErr);
+          console.warn('Direct fallback fetch for privacy-security failed:', fsErr?.message || fsErr);
         }
       }
     };

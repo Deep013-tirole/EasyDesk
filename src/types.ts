@@ -663,7 +663,7 @@ export interface CollectionIntegritySummary {
 
 export interface ValidationReport {
   timestamp: string;
-  scanSource: 'FIRESTORE_LIVE' | 'MEMORY_AND_FIRESTORE' | 'LOCAL_STATE';
+  scanSource: 'D1_LIVE' | 'D1_STORE' | 'LOCAL_STATE' | 'FIRESTORE_LIVE' | 'MEMORY_AND_FIRESTORE';
   overallStatus: 'HEALTHY' | 'WARNINGS_FOUND' | 'CRITICAL_ERRORS';
   stats: {
     totalEmployeesChecked: number;

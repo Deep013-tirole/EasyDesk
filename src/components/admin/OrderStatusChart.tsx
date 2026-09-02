@@ -200,7 +200,7 @@ export default function OrderStatusChart({ orders }: OrderStatusChartProps) {
         <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs font-sans space-y-1.5 min-w-44">
           <p className="font-bold border-b border-slate-700 pb-1 text-slate-300 flex items-center justify-between">
             <span>{label || payload[0]?.name}</span>
-            <span className="text-[10px] text-blue-400 font-mono">Firestore Data</span>
+            <span className="text-[10px] text-blue-400 font-mono">D1 Database</span>
           </p>
           {payload.map((entry: any, index: number) => {
             const val = entry.value;
@@ -229,7 +229,7 @@ export default function OrderStatusChart({ orders }: OrderStatusChartProps) {
         <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
         <h3 className="text-sm font-bold text-slate-700">No Orders in Database</h3>
         <p className="text-xs text-slate-400 max-w-sm mx-auto">
-          No citizen application orders have been recorded in Cloud Firestore yet. New orders will appear here automatically.
+          No citizen application orders have been recorded in Cloudflare D1 yet. New orders will appear here automatically.
         </p>
       </div>
     );
@@ -245,7 +245,7 @@ export default function OrderStatusChart({ orders }: OrderStatusChartProps) {
             <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200/60">
               <Activity className="w-3 h-3 text-indigo-600" /> Real-Time Database Metrics
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">Source: Firestore ({totalOrdersCount} Records)</span>
+            <span className="text-[10px] text-slate-400 font-mono">Source: Cloudflare D1 ({totalOrdersCount} Records)</span>
           </div>
           <h2 className="text-base font-bold text-slate-900 mt-1 flex items-center gap-2">
             Order Status Breakdown & Lifecycle Distribution

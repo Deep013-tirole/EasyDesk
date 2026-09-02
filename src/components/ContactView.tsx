@@ -108,7 +108,7 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
         }
       }
 
-      // Authoritative Direct Firestore Fallback
+      // Authoritative Direct API Fallback
       try {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
           const directContact = await getClientContactSettings();
@@ -124,7 +124,7 @@ export default function ContactView({ setView }: { setView?: (v: string) => void
         }
       } catch (fsErr: any) {
         if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-          console.warn('Failed to load direct Firestore contact settings:', fsErr?.message || fsErr);
+          console.warn('Failed to load direct fallback contact settings:', fsErr?.message || fsErr);
         }
       }
     };

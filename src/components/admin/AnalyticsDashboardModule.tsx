@@ -302,7 +302,7 @@ export default function AnalyticsDashboardModule({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-bold text-slate-900">Database Source of Truth: Cloud Firestore</h2>
+              <h2 className="text-xs font-bold text-slate-900">Database Source of Truth: Cloudflare D1</h2>
               <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                 <Check className="w-2.5 h-2.5" /> 100% Reconciled
               </span>
@@ -340,7 +340,7 @@ export default function AnalyticsDashboardModule({
             onClick={onRefresh}
             disabled={isLoading}
             className="border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-            title="Re-fetch and verify all analytics from Cloud Firestore"
+            title="Re-fetch and verify all analytics from Cloudflare D1"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
