@@ -19,12 +19,6 @@
       "database_id": "easydesk-prod-db"
     }
   ],
-  "r2_buckets": [
-    {
-      "binding": "STORAGE",
-      "bucket_name": "easydesk-prod-storage"
-    }
-  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
