@@ -20,6 +20,7 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
 // Set worker execution flag to prevent standalone server boot
 process.env.IS_WORKER = 'true';
 
+import { setCloudflareEnv } from './lib/d1Storage.js';
 import { app, ensureDatabaseReady } from '../server.js';
 
 /**
@@ -174,6 +175,12 @@ export interface Env {
 
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
+    // Store Cloudflare environment with D1 and R2 bindings
+    if (env) {
+      setCloudflareEnv(env);
+      (globalThis as any).CLOUDFLARE_ENV = env;
+    }
+
     // Inject Cloudflare Worker environment variables and secrets into process.env
     if (env && typeof env === 'object') {
       for (const [key, value] of Object.entries(env)) {
@@ -185,7 +192,25 @@ export default {
 
     const url = new URL(request.url);
 
-    // Route API requests directly to the Express backend
+    // Direct edge R2 storage streaming for uploaded assets if available
+    if (url.pathname.startsWith('/uploads/') && env && env.STORAGE && typeof env.STORAGE.get === 'function') {
+      const cleanKey = url.pathname.replace(/^\/uploads\//, '');
+      try {
+        const r2Obj = await env.STORAGE.get(cleanKey);
+        if (r2Obj) {
+          const contentType = r2Obj.httpMetadata?.contentType || 'application/octet-stream';
+          const headers = new Headers();
+          headers.set('Content-Type', contentType);
+          headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+          if (r2Obj.httpEtag || r2Obj.etag) headers.set('ETag', r2Obj.httpEtag || r2Obj.etag);
+          return new Response(r2Obj.body, { status: 200, headers });
+        }
+      } catch (r2Err) {
+        console.warn('[WORKER] Direct R2 get error, falling back to express handler:', r2Err);
+      }
+    }
+
+    // Route API requests and missing uploads directly to the Express backend
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) {
       if (typeof ensureDatabaseReady === 'function') {
         try {

@@ -27,12 +27,16 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
 import { 
   getFirestoreDb, 
   loadStateFromFirestore, 
+  loadFirestoreDoc,
   seedFirestoreFromInitialState, 
   persistFirestoreChange, 
   saveFirestoreDoc, 
   deleteFirestoreDoc, 
   saveFirestoreSetting,
   sanitizePaymentConfig,
+  putR2File,
+  getR2File,
+  deleteR2File,
   ENTITY_COLLECTIONS,
   SETTING_KEYS
 } from './src/lib/serverDb.js';
@@ -124,7 +128,28 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], async (req, res) =
   const filename = req.params.filename || req.params.folder;
   const targetPath = path.join(process.cwd(), 'uploads', folder, filename);
 
-  // 1. If file exists physically on disk, serve it immediately with cache headers
+  // 1. Check Cloudflare R2 Object Storage
+  const r2Key = `${folder}/${filename}`;
+  const r2DirectKey = filename;
+  try {
+    const r2Obj = await getR2File(r2Key) || await getR2File(r2DirectKey);
+    if (r2Obj) {
+      res.setHeader('Content-Type', r2Obj.contentType || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      if (r2Obj.etag) res.setHeader('ETag', r2Obj.etag);
+      if (Buffer.isBuffer(r2Obj.body)) {
+        return res.send(r2Obj.body);
+      }
+      if (typeof (r2Obj.body as any)?.pipe === 'function') {
+        return (r2Obj.body as any).pipe(res);
+      }
+      return res.send(r2Obj.body);
+    }
+  } catch (r2Err) {
+    // Proceed to disk or reconstruction
+  }
+
+  // 2. If file exists physically on disk, serve it immediately with cache headers
   if (fs.existsSync(targetPath)) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.sendFile(targetPath);
@@ -149,7 +174,7 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], async (req, res) =
     return res.sendFile(empPath);
   }
 
-  // 2. File missing from local disk: Attempt dynamic reconstruction from database media state
+  // 3. File missing from storage: Attempt dynamic reconstruction from database media state
   const reqUrl = req.originalUrl || `/uploads/${folder}/${filename}`;
   const mediaList = (dbState && dbState.media) ? dbState.media : [];
   
@@ -184,6 +209,9 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], async (req, res) =
           fs.mkdirSync(path.dirname(targetPath), { recursive: true });
           fs.writeFileSync(targetPath, buffer);
         } catch (diskErr) {}
+        // Also persist to R2 for subsequent zero-latency streaming
+        await putR2File(r2Key, buffer, mimeType);
+
         console.log(`[STORAGE] Reconstructed missing media file from database: ${filename}`);
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Length', buffer.length.toString());
@@ -2159,27 +2187,15 @@ function normalizeDatabaseRelationships() {
     dbState.admins = [];
   }
 
-  if (dbState.admins.length === 0) {
-    dbState.admins.push({ ...PRESEEDED_ADMINS[0] });
-  } else {
-    dbState.admins.forEach((admin: any) => {
-      admin.id = admin.id || `admin-${Date.now()}`;
-      admin.name = admin.name || 'Admin User';
-      admin.role = admin.role || 'ADMIN';
-      admin.status = admin.status || 'Active';
-      if (!admin.permissions || !Array.isArray(admin.permissions)) {
-        admin.permissions = admin.role === 'SUPER_ADMIN' ? ['*'] : [];
-      }
-      if (!admin.password || typeof admin.password !== 'string' || admin.password.trim() === '') {
-        admin.password = DEFAULT_PASSWORD_HASH;
-      }
-    });
-  }
-
-  // Ensure default super admin exists if list somehow doesn't have a super admin
-  if (!dbState.admins.some((a: any) => a.role === 'SUPER_ADMIN')) {
-    dbState.admins.unshift({ ...PRESEEDED_ADMINS[0] });
-  }
+  dbState.admins.forEach((admin: any) => {
+    admin.id = admin.id || `admin-${Date.now()}`;
+    admin.name = admin.name || 'Admin User';
+    admin.role = admin.role || 'ADMIN';
+    admin.status = admin.status || 'Active';
+    if (!admin.permissions || !Array.isArray(admin.permissions)) {
+      admin.permissions = admin.role === 'SUPER_ADMIN' ? ['*'] : [];
+    }
+  });
 
   // Ensure users list is an array
   if (!Array.isArray(dbState.users)) {
@@ -2349,12 +2365,15 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
       console.log('[DB] Baseline state and system_init sentinel successfully written to Cloud Firestore.');
       isFirestoreReady = true;
     } else {
-      console.warn('[DB] Firestore unreachable on this attempt; will retry on next request.');
-      firestoreInitPromise = null;
+      console.log('[DB] Cloud Firestore currently in local fallback mode; active memory/disk state active.');
+      // Do not mark permanently ready so subsequent requests can re-attempt when network/quota recovers
+      isFirestoreReady = false;
+      setTimeout(() => { firestoreInitPromise = null; }, 30000);
     }
   } catch (err) {
-    console.error('[DB] Error during async Firestore initialization:', err);
-    firestoreInitPromise = null;
+    console.error('[DB] Error during async Firestore initialization, continuing with local store:', err);
+    isFirestoreReady = false;
+    setTimeout(() => { firestoreInitPromise = null; }, 30000);
   }
 }
 
@@ -3021,30 +3040,47 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
         status: accEntry.status === 'Active' ? 'Active' : ((emp as any)?.status || emp?.employmentStatus || 'Active'),
         joiningDate: emp?.joiningDate || new Date().toISOString(),
         profileImage: emp?.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-        password: accEntry.password || DEFAULT_PASSWORD_HASH,
+        password: accEntry.password,
         permissions: accEntry.permissions || []
       };
     }
   }
 
-  // If still not found, check if database was empty and initialize default super admin
-  if (!admin && (!dbState.admins || dbState.admins.length === 0)) {
-    admin = {
-      id: 'super-admin-deepak',
-      name: 'Deepak',
-      email: 'tideepak8@gmail.com',
-      mobile: '+91 99999 99999',
-      role: 'SUPER_ADMIN' as any,
-      employeeId: 'emp-100',
-      department: 'Executive Leadership',
-      status: 'Active',
-      joiningDate: '2023-01-01',
-      profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-      password: DEFAULT_PASSWORD_HASH,
-      permissions: ['*']
-    };
-    dbState.admins = [admin];
-    await persistDatabase('admins', admin.id);
+  // If still not found in memory, attempt direct authoritative Firestore document lookup
+  if (!admin) {
+    try {
+      const remoteDoc = await loadFirestoreDoc('admins', 'super-admin-deepak');
+      if (remoteDoc && (
+        (remoteDoc.email && remoteDoc.email.toLowerCase() === normalizedInput) ||
+        normalizedInput === 'super-admin-deepak' ||
+        normalizedInput === 'tideepak8@gmail.com' ||
+        normalizedInput === 'admin' ||
+        normalizedInput === 'deepak' ||
+        normalizedInput === 'superadmin' ||
+        normalizedInput === 'super-admin'
+      )) {
+        admin = {
+          id: remoteDoc.id || 'super-admin-deepak',
+          name: remoteDoc.name || 'Deepak',
+          email: remoteDoc.email || 'tideepak8@gmail.com',
+          mobile: remoteDoc.mobile || '+91 99999 99999',
+          role: remoteDoc.role || 'SUPER_ADMIN',
+          employeeId: remoteDoc.employeeId || 'emp-100',
+          department: remoteDoc.department || 'Executive Leadership',
+          status: remoteDoc.status || 'Active',
+          joiningDate: remoteDoc.joiningDate || '2023-01-01',
+          profileImage: remoteDoc.profileImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+          password: remoteDoc.password,
+          permissions: remoteDoc.permissions || ['*']
+        };
+        if (!Array.isArray(dbState.admins)) dbState.admins = [];
+        const existingIdx = dbState.admins.findIndex((a: any) => a.id === admin.id || (a.email && a.email.toLowerCase() === admin.email.toLowerCase()));
+        if (existingIdx >= 0) dbState.admins[existingIdx] = admin;
+        else dbState.admins.push(admin);
+      }
+    } catch (e) {
+      console.warn('[AUTH] Direct Firestore lookup error:', e);
+    }
   }
 
   // If user is still not found among admins or staff, reject with 401
@@ -3073,6 +3109,30 @@ app.post(['/api/auth/admin/login', '/api/admin/login'], async (req, res) => {
       }
     } catch (e) {
       isMatch = false;
+    }
+  }
+
+  // If password comparison failed against in-memory record, check authoritative Firestore record directly
+  if (!isMatch) {
+    try {
+      const fsDocId = admin.id || 'super-admin-deepak';
+      const remoteDoc = await loadFirestoreDoc('admins', fsDocId);
+      if (remoteDoc && remoteDoc.password) {
+        if (remoteDoc.password.startsWith('$2a$') || remoteDoc.password.startsWith('$2b$')) {
+          isMatch = bcrypt.compareSync(effectivePassword, remoteDoc.password);
+        } else {
+          isMatch = (effectivePassword === remoteDoc.password);
+        }
+        if (isMatch) {
+          admin.password = remoteDoc.password;
+          admin.name = remoteDoc.name || admin.name;
+          admin.email = remoteDoc.email || admin.email;
+          admin.role = remoteDoc.role || admin.role;
+          admin.permissions = remoteDoc.permissions || admin.permissions;
+        }
+      }
+    } catch (e) {
+      console.warn('[AUTH] Authoritative Firestore password verification error:', e);
     }
   }
 
@@ -5060,8 +5120,13 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
     const filePath = path.join(process.cwd(), 'uploads', 'employees', uniqueFilename);
 
     const buffer = Buffer.from(base64Data, 'base64');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, buffer);
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, buffer);
+    } catch (fsErr) {}
+
+    // Persist to Cloudflare R2 bucket
+    await putR2File(`employees/${uniqueFilename}`, buffer, mimeType);
 
     const photoUrl = `/uploads/employees/${uniqueFilename}`;
 
@@ -5540,6 +5605,9 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
     // Ignored in worker
   }
 
+  // Persist sensitive document to Cloudflare R2 bucket
+  await putR2File(`documents/employees/${privateKey}`, fileBuffer, detectedMime);
+
   const sizeKb = (fileBuffer.length / 1024).toFixed(1);
   const sizeStr = fileBuffer.length > 1024 * 1024 ? `${(fileBuffer.length / (1024 * 1024)).toFixed(2)} MB` : `${sizeKb} KB`;
 
@@ -5568,7 +5636,7 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
   res.status(201).json(newDoc);
 });
 
-app.get('/api/admin/employees/:id/documents/:docId/download', authenticateToken, requirePermission(['employee_kyc.view', 'employee_kyc.manage', 'employees.view', 'employees.manage', 'documents.verify']), (req, res) => {
+app.get('/api/admin/employees/:id/documents/:docId/download', authenticateToken, requirePermission(['employee_kyc.view', 'employee_kyc.manage', 'employees.view', 'employees.manage', 'documents.verify']), async (req, res) => {
   const { id, docId } = req.params;
   const emp = findEmployee(id);
   const canonicalId = emp ? emp.id : id;
@@ -5578,16 +5646,33 @@ app.get('/api/admin/employees/:id/documents/:docId/download', authenticateToken,
     return res.status(404).json({ message: 'Employee document not found.' });
   }
 
+  // 1. Try R2 Storage
+  try {
+    const r2Doc = await getR2File(`documents/employees/${doc.privateFileKey}`) || await getR2File(doc.privateFileKey);
+    if (r2Doc) {
+      logAudit(req, 'SENSITIVE_DOCUMENT_DOWNLOADED', `Downloaded private document: ${doc.documentName} (${doc.documentType})`, canonicalId, docId);
+      res.setHeader('Content-Type', doc.mimeType || r2Doc.contentType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.originalFileName || doc.documentName)}"`);
+      if (Buffer.isBuffer(r2Doc.body)) {
+        return res.send(r2Doc.body);
+      }
+      if (typeof (r2Doc.body as any)?.pipe === 'function') {
+        return (r2Doc.body as any).pipe(res);
+      }
+      return res.send(r2Doc.body);
+    }
+  } catch (r2Err) {}
+
+  // 2. Try local disk
   const filePath = path.join(PRIVATE_UPLOADS_DIR, doc.privateFileKey);
-  if (!fs.existsSync || !fs.existsSync(filePath)) {
-    return res.status(404).json({ message: 'File not found in private vault storage.' });
+  if (fs.existsSync && fs.existsSync(filePath)) {
+    logAudit(req, 'SENSITIVE_DOCUMENT_DOWNLOADED', `Downloaded private document: ${doc.documentName} (${doc.documentType})`, canonicalId, docId);
+    res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.originalFileName || doc.documentName)}"`);
+    return res.sendFile(filePath);
   }
 
-  logAudit(req, 'SENSITIVE_DOCUMENT_DOWNLOADED', `Downloaded private document: ${doc.documentName} (${doc.documentType})`, canonicalId, docId);
-
-  res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.originalFileName || doc.documentName)}"`);
-  return res.sendFile(filePath);
+  return res.status(404).json({ message: 'File not found in private vault storage.' });
 });
 
 app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requirePermission(['employee_kyc.manage', 'employees.manage']), async (req, res) => {
@@ -5601,6 +5686,9 @@ app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requi
   }
 
   const doc = dbState.employeeDocuments[idx];
+  await deleteR2File(`documents/employees/${doc.privateFileKey}`);
+  await deleteR2File(doc.privateFileKey);
+
   const filePath = path.join(PRIVATE_UPLOADS_DIR, doc.privateFileKey);
   if (fs.existsSync && fs.existsSync(filePath)) {
     try { fs.unlinkSync(filePath); } catch (e) { console.error('Error deleting private file:', e); }
@@ -7597,6 +7685,9 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
       } catch (fsErr) {
         // Handled in serverless/worker runtimes where fs is read-only
       }
+
+      // Persist to Cloudflare R2 bucket
+      await putR2File(`media/${storedFileName}`, buffer, fileMime);
 
       let sizeStr = `${(sizeBytes / 1024).toFixed(1)} KB`;
       if (sizeBytes > 1024 * 1024) {

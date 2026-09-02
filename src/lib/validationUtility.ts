@@ -10,11 +10,11 @@ import {
   ValidationFinding, 
   CollectionIntegritySummary 
 } from '../types.js';
-import { getFirestoreDb, ENTITY_COLLECTIONS } from './serverDb.js';
-import { collection, getDocs } from 'firebase/firestore';
+import { ENTITY_COLLECTIONS } from './serverDb.js';
 
 export interface ValidationScanOptions {
   scanFirestore?: boolean;
+  scanDatabase?: boolean;
   autoFix?: boolean;
 }
 
@@ -36,45 +36,9 @@ export async function validateRecordRelationships(
   const findings: ValidationFinding[] = [];
   const timestamp = new Date().toISOString();
 
-  // Optionally fetch raw snapshots directly from Firestore to check Firestore-level persistence
+  // Active dataset scan source
   let rawFirestoreCollections: Record<string, any[]> = {};
   let scanSource: 'FIRESTORE_LIVE' | 'MEMORY_AND_FIRESTORE' | 'LOCAL_STATE' = 'LOCAL_STATE';
-
-  if (options.scanFirestore) {
-    const db = getFirestoreDb();
-    if (db) {
-      scanSource = 'FIRESTORE_LIVE';
-      try {
-        const collectionsToScan = [
-          'employees', 
-          'employeeKYC', 
-          'employeePayroll', 
-          'employeeAccounts', 
-          'employeeDocuments', 
-          'customers', 
-          'orders'
-        ];
-
-        const results = await Promise.allSettled(
-          collectionsToScan.map(async (collName) => {
-            const snap = await getDocs(collection(db, collName));
-            const docs: any[] = [];
-            snap.forEach(d => docs.push({ _docId: d.id, ...d.data() }));
-            return { collName, docs };
-          })
-        );
-
-        for (const res of results) {
-          if (res.status === 'fulfilled') {
-            rawFirestoreCollections[res.value.collName] = res.value.docs;
-          }
-        }
-      } catch (err) {
-        console.warn('[VALIDATION] Direct Firestore scan fallback to memory state:', err);
-        scanSource = 'MEMORY_AND_FIRESTORE';
-      }
-    }
-  }
 
   // Active dataset references
   const employees: EmployeeProfile[] = Array.isArray(dbState.employees) ? dbState.employees : [];

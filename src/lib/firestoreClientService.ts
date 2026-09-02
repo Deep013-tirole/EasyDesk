@@ -1,262 +1,247 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { db } from './firebaseClient';
-import bcrypt from 'bcryptjs';
-import { Service, ServiceCategory, Blog, BlogCategory, Review, User, UserRole } from '../types';
-
 /**
- * Timeout helper to prevent hanging promises on slow network or disconnected clients
+ * Client Data Service for EasyDesk
+ * All data operations route directly through Cloudflare Worker API (/api/*) backed by Cloudflare D1.
+ * Completely eliminates direct client-side Firestore access and read/write quota limits.
  */
-function withTimeout<T>(promise: Promise<T>, ms = 12000, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
-  ]);
-}
+import { Service, ServiceCategory, Blog, BlogCategory, Review, User } from '../types';
 
 function isNetworkOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
-function handleFirestoreError(context: string, err: any) {
-  const isOffline = isNetworkOffline();
-  const isUnavailable = err?.code === 'unavailable' || err?.message?.includes('offline') || err?.message?.includes('network') || err?.message?.includes('Failed to fetch');
-  if (!isOffline && !isUnavailable) {
-    console.warn(`[FirestoreClient] ${context}:`, err);
-  }
-}
-
 /**
- * Loads all services directly from Firestore
+ * Loads all services via Worker API
  */
-export async function getClientServices(): Promise<Service[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientServices(): Promise<Service[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'services');
-    const snapshot = await withTimeout(getDocs(q), 12000, null);
-    if (!snapshot || snapshot.empty) return [];
-    
-    const list: Service[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id } as Service);
+    const res = await fetch(`/api/services?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: Service[] = Array.isArray(data) ? data : (data.services || []);
     return list.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
   } catch (err) {
-    handleFirestoreError('Error fetching services', err);
-    return [];
+    console.warn('[DataClient] Error fetching services:', err);
+    return null;
   }
 }
 
 /**
- * Loads all service categories directly from Firestore
+ * Loads all service categories via Worker API
  */
-export async function getClientCategories(includeAll = false): Promise<ServiceCategory[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientCategories(includeAll = false): Promise<ServiceCategory[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'categories');
-    const snapshot = await withTimeout(getDocs(q), 12000, null);
-    if (!snapshot || snapshot.empty) return [];
-
-    const list: ServiceCategory[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id } as ServiceCategory);
+    const url = includeAll ? `/api/categories?includeAll=true&_t=${Date.now()}` : `/api/categories?_t=${Date.now()}`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
-    
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: ServiceCategory[] = Array.isArray(data) ? data : (data.categories || []);
     const filtered = includeAll ? list : list.filter(c => c.status !== 'Inactive');
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   } catch (err) {
-    handleFirestoreError('Error fetching categories', err);
-    return [];
+    console.warn('[DataClient] Error fetching categories:', err);
+    return null;
   }
 }
 
 /**
- * Loads all blog categories directly from Firestore
+ * Loads all blog categories via Worker API
  */
-export async function getClientBlogCategories(includeAll = false): Promise<BlogCategory[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientBlogCategories(includeAll = false): Promise<BlogCategory[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'blogCategories');
-    const snapshot = await withTimeout(getDocs(q), 12000, null);
-    if (!snapshot || snapshot.empty) return [];
-
-    const list: BlogCategory[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id } as BlogCategory);
+    const res = await fetch(`/api/blog-categories?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
-
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: BlogCategory[] = Array.isArray(data) ? data : (data.blogCategories || []);
     const filtered = includeAll ? list : list.filter(c => c.status !== 'Inactive');
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   } catch (err) {
-    handleFirestoreError('Error fetching blog categories', err);
-    return [];
+    console.warn('[DataClient] Error fetching blog categories:', err);
+    return null;
   }
 }
 
 /**
- * Loads all blogs directly from Firestore
+ * Loads all blogs via Worker API
  */
-export async function getClientBlogs(): Promise<Blog[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientBlogs(): Promise<Blog[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'blogs');
-    const snapshot = await withTimeout(getDocs(q), 12000, null);
-    if (!snapshot || snapshot.empty) return [];
-
-    const list: Blog[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id } as Blog);
+    const res = await fetch(`/api/blogs?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: Blog[] = Array.isArray(data) ? data : (data.blogs || []);
     return list.sort((a, b) => new Date(b.publishedAt || b.date || 0).getTime() - new Date(a.publishedAt || a.date || 0).getTime());
   } catch (err) {
-    handleFirestoreError('Error fetching blogs', err);
-    return [];
+    console.warn('[DataClient] Error fetching blogs:', err);
+    return null;
   }
 }
 
 /**
- * Loads all reviews directly from Firestore
+ * Loads all reviews via Worker API
  */
-export async function getClientReviews(): Promise<Review[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientReviews(): Promise<Review[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'reviews');
-    const snapshot = await withTimeout(getDocs(q), 12000, null);
-    if (!snapshot || snapshot.empty) return [];
-
-    const list: Review[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id } as Review);
+    const res = await fetch(`/api/reviews?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: Review[] = Array.isArray(data) ? data : (data.reviews || []);
     return list.filter(r => r.status === 'Approved' || (r as any).status === undefined);
   } catch (err) {
-    handleFirestoreError('Error fetching reviews', err);
-    return [];
+    console.warn('[DataClient] Error fetching reviews:', err);
+    return null;
   }
 }
 
 /**
- * Loads all FAQs directly from Firestore
+ * Loads all FAQs via Worker API
  */
-export async function getClientFaqs(): Promise<any[]> {
-  if (isNetworkOffline()) return [];
+export async function getClientFaqs(): Promise<any[] | null> {
+  if (isNetworkOffline()) return null;
   try {
-    const q = collection(db, 'faqs');
-    const snapshot = await withTimeout(getDocs(q), 4000, null);
-    if (!snapshot || snapshot.empty) return [];
-
-    const list: any[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      delete data._updatedAt;
-      list.push({ ...data, id: data.id || d.id });
+    const res = await fetch(`/api/faqs?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list: any[] = Array.isArray(data) ? data : (data.faqs || []);
     return list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   } catch (err) {
-    handleFirestoreError('Error fetching faqs', err);
-    return [];
+    console.warn('[DataClient] Error fetching faqs:', err);
+    return null;
   }
 }
 
 /**
- * Loads a specific setting document directly from Firestore
+ * Loads a specific setting via Worker API
  */
 export async function getClientSetting<T = any>(settingKey: string): Promise<T | null> {
+  if (isNetworkOffline()) return null;
   try {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return null;
+    const res = await fetch(`/api/settings/${settingKey}?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return (data && (data[settingKey] !== undefined ? data[settingKey] : data)) as T;
     }
-    const docRef = doc(db, 'settings', settingKey);
-    const snap = await withTimeout(getDoc(docRef), 4000, null);
-    if (snap && snap.exists()) {
-      const data = snap.data();
-      delete data._updatedAt;
-      return data as T;
-    }
-  } catch (err: any) {
-    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    const isUnavailable = err?.code === 'unavailable' || err?.message?.includes('offline') || err?.message?.includes('network');
-    if (!isOffline && !isUnavailable) {
-      console.warn(`[FirestoreClient] Error fetching setting ${settingKey}:`, err);
-    }
+  } catch (err) {
+    console.warn(`[DataClient] Error fetching setting ${settingKey}:`, err);
   }
   return null;
 }
 
 /**
- * Loads Privacy & Security settings directly from Firestore with robust fallback
+ * Loads Privacy & Security settings via Worker API
  */
 export async function getClientPrivacySecurity(): Promise<any> {
+  if (isNetworkOffline()) return null;
   try {
-    const direct1 = await getClientSetting('privacySecurity');
-    if (direct1 && direct1.hero) return direct1;
-
-    const direct2 = await getClientSetting('privacySecuritySettings');
-    if (direct2 && direct2.hero) return direct2;
+    const res = await fetch(`/api/settings/privacy-security?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.privacySecurity || data.privacySecuritySettings || data;
+    }
   } catch (err) {
-    handleFirestoreError('Error loading Privacy & Security', err);
+    console.warn('[DataClient] Error loading Privacy & Security:', err);
   }
   return null;
 }
 
 /**
- * Loads Payment Configuration directly from Firestore
+ * Loads Payment Configuration via Worker API
  */
 export async function getClientPaymentConfig(): Promise<any> {
+  if (isNetworkOffline()) return null;
   try {
-    const pay1 = await getClientSetting('paymentConfig');
-    if (pay1 && (pay1.upiId || pay1.bankName || pay1.accountNumber)) return pay1;
-
-    const pay2 = await getClientSetting('paymentSettings');
-    if (pay2 && (pay2.upiId || pay2.bankName || pay2.accountNumber)) return pay2;
+    const res = await fetch(`/api/settings/payment?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.paymentConfig || data.paymentSettings || data;
+    }
   } catch (err) {
-    handleFirestoreError('Error loading Payment Config', err);
+    console.warn('[DataClient] Error loading Payment Config:', err);
   }
   return null;
 }
 
 /**
- * Loads Contact Settings directly from Firestore
+ * Loads Contact Settings via Worker API
  */
 export async function getClientContactSettings(): Promise<any> {
+  if (isNetworkOffline()) return null;
   try {
-    const contact = await getClientSetting('contactSettings');
-    if (contact && (contact.phone || contact.email || contact.companyName)) return contact;
+    const res = await fetch(`/api/settings/contact?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.contactSettings || data;
+    }
   } catch (err) {
-    handleFirestoreError('Error loading Contact Settings', err);
+    console.warn('[DataClient] Error loading Contact Settings:', err);
   }
   return null;
 }
 
 /**
- * Loads About Us and Founder data directly from Firestore
+ * Loads About Us and Founder data via Worker API
  */
 export async function getClientAboutUs(): Promise<{ aboutUs: any; founder: any }> {
+  if (isNetworkOffline()) return { aboutUs: null, founder: null };
   try {
-    const [aboutUs, founder] = await Promise.all([
-      getClientSetting('aboutUs'),
-      getClientSetting('founder')
-    ]);
-    return { aboutUs, founder };
+    const res = await fetch(`/api/about?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        aboutUs: data.aboutUs || null,
+        founder: data.founder || null
+      };
+    }
   } catch (err) {
-    handleFirestoreError('Error loading About Us', err);
-    return { aboutUs: null, founder: null };
+    console.warn('[DataClient] Error loading About Us:', err);
   }
+  return { aboutUs: null, founder: null };
 }
 
 /**
- * Authenticates admin directly via server backend API to ensure credentials, hashes, and passwords never touch client-side Firestore queries
+ * Authenticates admin directly via server backend API to ensure credentials and hashes are verified securely on server
  */
-export async function authenticateAdminDirect(loginId: string, rawPassword: string): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
+export async function authenticateAdminDirect(
+  loginId: string, 
+  rawPassword: string
+): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
   try {
     const cleanId = (loginId || '').trim();
     const cleanPass = (rawPassword || '').trim();
@@ -299,47 +284,60 @@ export async function authenticateAdminDirect(loginId: string, rawPassword: stri
   }
 }
 
-
 /**
- * Saves a document directly to Firestore collection
+ * Saves a document via Worker API
  */
 export async function saveClientFirestoreDoc(collectionName: string, docId: string, data: any): Promise<boolean> {
   try {
-    const docRef = doc(db, collectionName, String(docId));
-    const cleanData = JSON.parse(JSON.stringify(data));
-    await setDoc(docRef, { ...cleanData, _updatedAt: Date.now() }, { merge: true });
-    return true;
+    const res = await fetch(`/api/admin/${collectionName}/${encodeURIComponent(docId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify(data)
+    });
+    return res.ok;
   } catch (err) {
-    console.error(`[FirestoreClient] Error saving to ${collectionName}/${docId}:`, err);
+    console.error(`[DataClient] Error saving to ${collectionName}/${docId}:`, err);
     return false;
   }
 }
 
 /**
- * Deletes a document directly from Firestore collection
+ * Deletes a document via Worker API
  */
 export async function deleteClientFirestoreDoc(collectionName: string, docId: string): Promise<boolean> {
   try {
-    const docRef = doc(db, collectionName, String(docId));
-    await deleteDoc(docRef);
-    return true;
+    const res = await fetch(`/api/admin/${collectionName}/${encodeURIComponent(docId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      }
+    });
+    return res.ok;
   } catch (err) {
-    console.error(`[FirestoreClient] Error deleting from ${collectionName}/${docId}:`, err);
+    console.error(`[DataClient] Error deleting from ${collectionName}/${docId}:`, err);
     return false;
   }
 }
 
 /**
- * Saves a setting document directly to Firestore 'settings' collection
+ * Saves a setting document via Worker API
  */
 export async function saveClientFirestoreSetting(settingKey: string, data: any): Promise<boolean> {
   try {
-    const docRef = doc(db, 'settings', settingKey);
-    const cleanData = JSON.parse(JSON.stringify(data));
-    await setDoc(docRef, { ...cleanData, _updatedAt: Date.now() }, { merge: true });
-    return true;
+    const res = await fetch(`/api/admin/settings/${settingKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify(data)
+    });
+    return res.ok;
   } catch (err) {
-    console.error(`[FirestoreClient] Error saving setting ${settingKey}:`, err);
+    console.error(`[DataClient] Error saving setting ${settingKey}:`, err);
     return false;
   }
 }

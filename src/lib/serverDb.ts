@@ -1,70 +1,48 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, setLogLevel } from 'firebase/firestore';
+/**
+ * Server Database Layer for EasyDesk
+ * Uses Cloudflare D1 (SQL) for structured data and Cloudflare R2 for object storage.
+ * Completely replaces Firestore to eliminate all read/write quotas.
+ */
 import fs from 'fs';
 import path from 'path';
-import defaultFirebaseConfig from '../../firebase-applet-config.json';
+import {
+  setCloudflareEnv,
+  getCloudflareEnv,
+  getD1Database,
+  getR2Storage,
+  initD1Schema,
+  loadStateFromD1,
+  saveEntityToD1,
+  deleteEntityFromD1,
+  saveSettingToD1,
+  loadEntityFromD1,
+  seedD1FromState,
+  putR2File,
+  getR2File,
+  deleteR2File,
+  CloudflareEnv
+} from './d1Storage';
 
-try {
-  setLogLevel('error');
-} catch {}
+export {
+  setCloudflareEnv,
+  getCloudflareEnv,
+  getD1Database,
+  getR2Storage,
+  initD1Schema,
+  loadStateFromD1,
+  saveEntityToD1,
+  deleteEntityFromD1,
+  saveSettingToD1,
+  loadEntityFromD1,
+  seedD1FromState,
+  putR2File,
+  getR2File,
+  deleteR2File
+};
 
-export interface FirebaseAppletConfig {
-  projectId: string;
-  appId?: string;
-  apiKey: string;
-  authDomain?: string;
-  firestoreDatabaseId?: string;
-  storageBucket?: string;
-  messagingSenderId?: string;
-  [key: string]: any;
-}
+export type { CloudflareEnv };
 
-export function getFirebaseConfig(): FirebaseAppletConfig {
-  let config: any = defaultFirebaseConfig;
-  if (!config || !config.apiKey || !config.projectId) {
-    try {
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      }
-    } catch {}
-  }
-  return {
-    projectId: (typeof process !== 'undefined' && process.env?.FIREBASE_PROJECT_ID) || config?.projectId || 'khaki-fact-snzsc',
-    apiKey: (typeof process !== 'undefined' && process.env?.FIREBASE_API_KEY) || config?.apiKey || 'AIzaSyBAizmQai3ZxSD2eju4cuM6Tmink8V77Xc',
-    authDomain: (typeof process !== 'undefined' && process.env?.FIREBASE_AUTH_DOMAIN) || config?.authDomain || 'khaki-fact-snzsc.firebaseapp.com',
-    firestoreDatabaseId: (typeof process !== 'undefined' && process.env?.FIRESTORE_DATABASE_ID) || config?.firestoreDatabaseId || 'ai-studio-easydesk-86b0eb93-35f8-405c-a919-7be0008ea942',
-    storageBucket: (typeof process !== 'undefined' && process.env?.FIREBASE_STORAGE_BUCKET) || config?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app',
-    messagingSenderId: (typeof process !== 'undefined' && process.env?.FIREBASE_MESSAGING_SENDER_ID) || config?.messagingSenderId || '499604770609',
-    appId: (typeof process !== 'undefined' && process.env?.FIREBASE_APP_ID) || config?.appId || '1:499604770609:web:1080cb6cfee39da28f2a10'
-  };
-}
-
-export function getFirestoreRestBaseUrl(): string {
-  const config = getFirebaseConfig();
-  const dbId = config.firestoreDatabaseId || '(default)';
-  return `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${dbId}/documents`;
-}
-
-let firestoreInstance: ReturnType<typeof getFirestore> | null = null;
-
-export function getFirestoreDb() {
-  if (firestoreInstance) return firestoreInstance;
-  try {
-    const config = getFirebaseConfig();
-    if (config && config.apiKey) {
-      const app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
-      const databaseId = config.firestoreDatabaseId || '(default)';
-      firestoreInstance = getFirestore(app, databaseId);
-      return firestoreInstance;
-    }
-  } catch (err) {
-    console.error('[FIREBASE] Error initializing Firestore SDK:', err);
-  }
-  return null;
-}
-
-// Entity collection names stored as individual documents in Firestore
+// Entity collection names stored as individual documents in D1
 export const ENTITY_COLLECTIONS = [
   'services',
   'categories',
@@ -97,7 +75,7 @@ export const ENTITY_COLLECTIONS = [
   'team',
 ] as const;
 
-// Settings document keys stored inside the 'settings' Firestore collection
+// Settings document keys stored inside the D1 'system_settings' table
 export const SETTING_KEYS = [
   'system_init',
   'aboutUs',
@@ -112,6 +90,7 @@ export const SETTING_KEYS = [
   'settings',
   'adminProfileSettings',
   'masterData',
+  'seoSettings'
 ] as const;
 
 /**
@@ -147,538 +126,133 @@ export function sanitizePaymentConfig(raw: any): Record<string, any> {
 }
 
 /**
- * Decodes Firestore REST API typed values to standard JavaScript objects
+ * Compatibility wrapper: loads a single document from D1.
  */
-export function decodeFirestoreValue(val: any): any {
-  if (!val || typeof val !== 'object') return null;
-  if ('stringValue' in val) return val.stringValue;
-  if ('booleanValue' in val) return val.booleanValue;
-  if ('integerValue' in val) return Number(val.integerValue);
-  if ('doubleValue' in val) return Number(val.doubleValue);
-  if ('timestampValue' in val) return val.timestampValue;
-  if ('nullValue' in val) return null;
-  if ('arrayValue' in val) {
-    return (val.arrayValue.values || []).map(decodeFirestoreValue);
+export async function loadFirestoreDoc(collectionName: string, docId: string): Promise<Record<string, any> | null> {
+  return loadEntityFromD1(collectionName, docId);
+}
+
+/**
+ * Compatibility wrapper: saves a single document to D1.
+ */
+export async function saveFirestoreDoc(collectionName: string, docId: string, data: any): Promise<void> {
+  await saveEntityToD1(collectionName, docId, data);
+}
+
+/**
+ * Compatibility wrapper: deletes a single document from D1.
+ */
+export async function deleteFirestoreDoc(collectionName: string, docId: string): Promise<void> {
+  await deleteEntityFromD1(collectionName, docId);
+}
+
+/**
+ * Compatibility wrapper: saves a setting to D1.
+ */
+export async function saveFirestoreSetting(settingKey: string, data: any): Promise<void> {
+  await saveSettingToD1(settingKey, data);
+}
+
+/**
+ * Compatibility wrapper: loads entire state from Cloudflare D1.
+ */
+export async function loadStateFromFirestore(): Promise<{
+  state: Record<string, any>;
+  isFreshDatabase: boolean;
+  totalDocsLoaded: number;
+} | null> {
+  // 1. Try loading from Cloudflare D1
+  const d1Res = await loadStateFromD1();
+  if (d1Res) {
+    return d1Res;
   }
-  if ('mapValue' in val) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
-      obj[k] = decodeFirestoreValue(v);
+
+  // 2. Fallback to local db_store.json if running in standalone local Node environment without D1
+  try {
+    const dbFile = path.join(process.cwd(), 'db_store.json');
+    if (fs.existsSync(dbFile)) {
+      const content = fs.readFileSync(dbFile, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          state: parsed,
+          isFreshDatabase: false,
+          totalDocsLoaded: Object.keys(parsed).length
+        };
+      }
     }
-    return obj;
-  }
+  } catch {}
+
   return null;
 }
 
 /**
- * Decodes a Firestore document REST response into a standard JavaScript object
+ * Compatibility wrapper: seeds D1 with initial state.
  */
-export function decodeFirestoreDocument(doc: any): Record<string, any> {
-  if (!doc || !doc.fields) return {};
-  const data: Record<string, any> = {};
-  for (const [k, v] of Object.entries(doc.fields)) {
-    data[k] = decodeFirestoreValue(v);
-  }
-  return data;
+export async function seedFirestoreFromInitialState(initialState: Record<string, any>): Promise<void> {
+  await seedD1FromState(initialState);
 }
 
 /**
- * Encodes a standard JavaScript value into Firestore REST API typed structure
- */
-export function encodeFirestoreValue(val: any): any {
-  if (val === null || val === undefined) return { nullValue: null };
-  if (typeof val === 'boolean') return { booleanValue: val };
-  if (typeof val === 'number') {
-    if (Number.isInteger(val)) return { integerValue: String(val) };
-    return { doubleValue: val };
-  }
-  if (typeof val === 'string') return { stringValue: val };
-  if (Array.isArray(val)) {
-    return { arrayValue: { values: val.map(encodeFirestoreValue) } };
-  }
-  if (typeof val === 'object') {
-    const fields: Record<string, any> = {};
-    for (const [k, v] of Object.entries(val)) {
-      if (v !== undefined) {
-        fields[k] = encodeFirestoreValue(v);
-      }
-    }
-    return { mapValue: { fields } };
-  }
-  return { stringValue: String(val) };
-}
-
-/**
- * Encodes a JavaScript object into a Firestore document structure
- */
-export function encodeFirestoreDocument(obj: Record<string, any>): { fields: Record<string, any> } {
-  const fields: Record<string, any> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) {
-      fields[k] = encodeFirestoreValue(v);
-    }
-  }
-  return { fields };
-}
-
-/**
- * Saves a single document to its entity collection in Firestore via direct REST API with fetch.
- */
-export async function saveFirestoreDoc(collectionName: string, docId: string, data: any): Promise<void> {
-  if (!docId || !data) return;
-  const config = getFirebaseConfig();
-  if (!config.apiKey) return;
-
-  const baseUrl = getFirestoreRestBaseUrl();
-  const url = `${baseUrl}/${collectionName}/${encodeURIComponent(String(docId))}?key=${config.apiKey}`;
-  const cleanData = JSON.parse(JSON.stringify(data));
-  cleanData._updatedAt = Date.now();
-
-  try {
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(encodeFirestoreDocument(cleanData))
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.error(`[FIREBASE REST] Error saving ${collectionName}/${docId}: HTTP ${res.status} - ${errText}`);
-    } else {
-      console.log(`[FIREBASE REST] Saved doc to ${collectionName}/${docId}`);
-    }
-  } catch (err) {
-    console.error(`[FIREBASE REST] Network error saving doc to ${collectionName}/${docId}:`, err);
-  }
-}
-
-/**
- * Deletes a single document from an entity collection in Firestore via direct REST API with fetch.
- */
-export async function deleteFirestoreDoc(collectionName: string, docId: string): Promise<void> {
-  if (!docId) return;
-  const config = getFirebaseConfig();
-  if (!config.apiKey) return;
-
-  const baseUrl = getFirestoreRestBaseUrl();
-  const url = `${baseUrl}/${collectionName}/${encodeURIComponent(String(docId))}?key=${config.apiKey}`;
-
-  try {
-    const res = await fetch(url, {
-      method: 'DELETE'
-    });
-
-    if (!res.ok && res.status !== 404) {
-      const errText = await res.text().catch(() => '');
-      console.error(`[FIREBASE REST] Error deleting ${collectionName}/${docId}: HTTP ${res.status} - ${errText}`);
-    } else {
-      console.log(`[FIREBASE REST] Successfully deleted doc from ${collectionName}/${docId}`);
-    }
-  } catch (err) {
-    console.error(`[FIREBASE REST] Network error deleting doc from ${collectionName}/${docId}:`, err);
-  }
-}
-
-/**
- * Saves a settings object to the 'settings' collection in Firestore via direct REST API with fetch.
- */
-export async function saveFirestoreSetting(settingKey: string, data: any): Promise<void> {
-  if (!settingKey || !data) return;
-  const config = getFirebaseConfig();
-  if (!config.apiKey) return;
-
-  const baseUrl = getFirestoreRestBaseUrl();
-  const url = `${baseUrl}/settings/${encodeURIComponent(settingKey)}?key=${config.apiKey}`;
-  const cleanData = JSON.parse(JSON.stringify(data));
-  cleanData._updatedAt = Date.now();
-
-  try {
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(encodeFirestoreDocument(cleanData))
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.error(`[FIREBASE REST] Error saving setting ${settingKey}: HTTP ${res.status} - ${errText}`);
-    } else {
-      console.log(`[FIREBASE REST] Saved setting to settings/${settingKey}`);
-    }
-  } catch (err) {
-    console.error(`[FIREBASE REST] Network error saving setting ${settingKey}:`, err);
-  }
-}
-
-/**
- * Seeds all dbState collections and settings to document-per-entity structure in Firestore.
- */
-export async function seedFirestoreFromInitialState(dbState: Record<string, any>): Promise<void> {
-  console.log('[FIREBASE REST] Writing document-per-entity structure to Firestore...');
-  const promises: Promise<void>[] = [];
-
-  // Write system initialization sentinel FIRST
-  promises.push(saveFirestoreSetting('system_init', {
-    isInitialized: true,
-    initializedAt: new Date().toISOString(),
-    version: '2.1.0'
-  }));
-
-  // Seed entity collections
-  for (const collName of ENTITY_COLLECTIONS) {
-    const val = dbState[collName];
-    if (Array.isArray(val)) {
-      for (const item of val) {
-        if (item && item.id) {
-          promises.push(saveFirestoreDoc(collName, String(item.id), item));
-        }
-      }
-    } else if (val && typeof val === 'object') {
-      for (const [k, item] of Object.entries(val)) {
-        if (item && typeof item === 'object') {
-          promises.push(saveFirestoreDoc(collName, String(k), item));
-        }
-      }
-    }
-  }
-
-  // Seed settings
-  for (const settingKey of SETTING_KEYS) {
-    if (settingKey === 'system_init') continue;
-    if (settingKey === 'masterData') {
-      if (dbState.masterData) {
-        promises.push(saveFirestoreSetting('masterData', dbState.masterData));
-      }
-    } else if (settingKey === 'privacySecurity' || settingKey === 'privacySecuritySettings') {
-      const privData = dbState.privacySecuritySettings || dbState.privacySecurity;
-      if (privData !== undefined) {
-        promises.push(saveFirestoreSetting(settingKey, privData));
-      }
-    } else if (settingKey === 'paymentConfig' || settingKey === 'paymentSettings') {
-      const payData = dbState.paymentConfig || dbState.settings?.paymentConfig || dbState.paymentSettings;
-      if (payData !== undefined) {
-        promises.push(saveFirestoreSetting(settingKey, payData));
-      }
-    } else if (dbState[settingKey] !== undefined) {
-      promises.push(saveFirestoreSetting(settingKey, dbState[settingKey]));
-    }
-  }
-
-  await Promise.allSettled(promises);
-  console.log('[FIREBASE REST] Document-per-entity seed completed.');
-}
-
-export interface FirestoreLoadResult {
-  state: Record<string, any>;
-  isFreshDatabase: boolean;
-  totalDocsLoaded: number;
-}
-
-async function fetchWithRetry(url: string, options: RequestInit, retries = 1, timeoutMs = 8000): Promise<Response> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-      if (res.ok || res.status === 404) {
-        return res;
-      }
-      if (attempt === retries) return res;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt === retries) throw err;
-    }
-    // Small backoff before retry
-    await new Promise(r => setTimeout(r, 150));
-  }
-  throw new Error('fetchWithRetry failed');
-}
-
-/**
- * Loads entire state from Firestore document-per-entity structure via batched direct REST queries.
- */
-export async function loadStateFromFirestore(): Promise<FirestoreLoadResult | null> {
-  const config = getFirebaseConfig();
-  if (!config.apiKey || !config.projectId) {
-    console.warn('[FIREBASE REST] Missing Firebase API Key or Project ID in configuration');
-    return null;
-  }
-
-  const baseUrl = getFirestoreRestBaseUrl();
-  const queryUrl = `${baseUrl}:runQuery?key=${config.apiKey}`;
-
-  try {
-    const stateFromDb: Record<string, any> = {};
-    let totalDocsLoaded = 0;
-    let successfulQueryCount = 0;
-
-    // 1. Query settings and entity collections in parallel with robust individual handling
-    const queryCollection = async (collName: string) => {
-      try {
-        const queryBody: Record<string, any> = {
-          structuredQuery: {
-            from: [{ collectionId: collName }]
-          }
-        };
-        // Cap audit logs on cold hydration to prevent transferring megabytes over edge
-        if (collName === 'auditLogs') {
-          queryBody.structuredQuery.limit = 100;
-        }
-
-        const res = await fetchWithRetry(queryUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(queryBody)
-        }, 1, 6000);
-
-        if (!res.ok) {
-          console.warn(`[FIREBASE REST] ${collName} runQuery returned HTTP ${res.status}`);
-          return { collName, items: [], exists: false, success: false };
-        }
-
-        const data = await res.json();
-        const items: any[] = [];
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.document && item.document.name) {
-              const docData = decodeFirestoreDocument(item.document);
-              delete docData._updatedAt;
-              const docId = item.document.name.split('/').pop() || '';
-              if (!docData.id && docId) {
-                docData.id = docId;
-              }
-              items.push(docData);
-            }
-          }
-        }
-        return { collName, items, exists: items.length > 0, success: true };
-      } catch (e) {
-        console.error(`[FIREBASE REST] Error querying collection ${collName}:`, e);
-        return { collName, items: [], exists: false, success: false };
-      }
-    };
-
-    // Run settings query and all entity collection queries concurrently in parallel
-    const [settingsRes, ...entityResults] = await Promise.all([
-      queryCollection('settings'),
-      ...ENTITY_COLLECTIONS.map(coll => queryCollection(coll))
-    ]);
-
-    // Process settings
-    let settingsResult: Record<string, any> = {};
-    if (settingsRes.success) {
-      successfulQueryCount++;
-      for (const item of settingsRes.items) {
-        const docId = item.id;
-        if (docId) {
-          settingsResult[docId] = item;
-        }
-      }
-    }
-
-    // Process entity results
-    for (const { collName, items, exists, success } of entityResults) {
-      if (success) {
-        successfulQueryCount++;
-      } else {
-        console.warn(`[FIREBASE REST] Skipping collection ${collName} due to fetch error to preserve memory state.`);
-        continue;
-      }
-      if (['employeeKYC', 'employeePayroll', 'employeeAccounts'].includes(collName)) {
-        const map: Record<string, any> = {};
-        for (const item of items) {
-          const key = item.employeeId || item.id;
-          if (key) map[key] = item;
-        }
-        stateFromDb[collName] = map;
-      } else {
-        stateFromDb[collName] = items;
-      }
-      if (exists) {
-        totalDocsLoaded += items.length;
-      }
-    }
-
-    // Process settings results
-    const settingsCount = Object.keys(settingsResult).length;
-    for (const [key, val] of Object.entries(settingsResult)) {
-      stateFromDb[key] = val;
-      if (key === 'privacySecurity' || key === 'privacySecuritySettings') {
-        stateFromDb['privacySecurity'] = val;
-        stateFromDb['privacySecuritySettings'] = val;
-      }
-      if (key === 'paymentSettings' || key === 'paymentConfig') {
-        const flatPayment = sanitizePaymentConfig(val);
-        if (!stateFromDb['settings']) stateFromDb['settings'] = {};
-        stateFromDb['settings'].paymentConfig = flatPayment;
-        stateFromDb['paymentConfig'] = flatPayment;
-        stateFromDb['paymentSettings'] = flatPayment;
-      }
-      if (key === 'contactSettings') {
-        stateFromDb['contactSettings'] = val;
-      }
-      if (key === 'aboutUs') {
-        stateFromDb['aboutUs'] = val;
-      }
-      if (key === 'founder') {
-        stateFromDb['founder'] = val;
-      }
-      if (key === 'companyProfile') {
-        stateFromDb['companyProfile'] = val;
-      }
-      if (key === 'masterData') {
-        stateFromDb['masterData'] = val;
-      }
-    }
-
-    // If no queries succeeded at all, do not assume fresh database (network is down or slow)
-    if (successfulQueryCount === 0) {
-      console.warn('[FIREBASE REST] All Firestore collection queries failed. Retaining current in-memory state.');
-      return null;
-    }
-
-    const anyQueryFailed = !settingsRes.success || entityResults.some(r => !r.success);
-    const systemInitDoc = settingsResult['system_init'];
-    const isAlreadyInitialized = !!systemInitDoc || totalDocsLoaded > 0 || settingsCount > 0;
-
-    if (!isAlreadyInitialized) {
-      // If any collection query failed due to network / offline / timeout, DO NOT seed or treat as fresh
-      if (anyQueryFailed) {
-        console.warn('[FIREBASE REST] Some collection queries failed due to network/timeout. Retaining current state and skipping fresh database seed.');
-        return { state: stateFromDb, isFreshDatabase: false, totalDocsLoaded };
-      }
-      console.log('[FIREBASE REST] Verified genuine empty database (all queries succeeded with 0 records). Ready for initial seeding.');
-      return { state: {}, isFreshDatabase: true, totalDocsLoaded: 0 };
-    }
-
-    console.log(`[FIREBASE REST] Successfully loaded ${totalDocsLoaded} entity docs and ${settingsCount} settings from Cloud Firestore.`);
-    return { state: stateFromDb, isFreshDatabase: false, totalDocsLoaded };
-  } catch (err) {
-    console.error('[FIREBASE REST] Failed to load state from Firestore:', err);
-    return null;
-  }
-}
-
-/**
- * Persists changes to Firestore for a specific entity or setting key via direct REST calls.
+ * Compatibility wrapper: persists targeted changes to Cloudflare D1.
  */
 export async function persistFirestoreChange(
-  dbState: Record<string, any>,
+  state: Record<string, any>,
   collectionOrKey?: string,
   id?: string
 ): Promise<void> {
   if (!collectionOrKey) {
-    // Flush all active settings
-    const promises: Promise<any>[] = [];
+    // Persist all settings and collections
     for (const key of SETTING_KEYS) {
-      if (dbState[key] !== undefined && key !== 'system_init') {
-        if (key === 'paymentConfig' || key === 'paymentSettings') {
-          const flatPayment = sanitizePaymentConfig(dbState.paymentConfig || dbState.settings?.paymentConfig || dbState.paymentSettings);
-          promises.push(saveFirestoreSetting('paymentConfig', flatPayment));
-          promises.push(saveFirestoreSetting('paymentSettings', flatPayment));
-        } else {
-          promises.push(saveFirestoreSetting(key, dbState[key]));
-        }
+      if (state[key] !== undefined) {
+        await saveSettingToD1(key, state[key]);
       }
     }
-    await Promise.allSettled(promises);
-    return;
-  }
-
-  // Check if it's a setting
-  if ((SETTING_KEYS as readonly string[]).includes(collectionOrKey) || collectionOrKey === 'settings') {
-    if (collectionOrKey === 'paymentConfig' || collectionOrKey === 'paymentSettings' || collectionOrKey === 'settings') {
-      const rawData = dbState.paymentConfig || dbState.settings?.paymentConfig || dbState.paymentSettings;
-      const dataToSave = sanitizePaymentConfig(rawData);
-      dbState.paymentConfig = dataToSave;
-      dbState.paymentSettings = dataToSave;
-      if (dbState.settings) dbState.settings.paymentConfig = dataToSave;
-      await Promise.allSettled([
-        saveFirestoreSetting('paymentConfig', dataToSave),
-        saveFirestoreSetting('paymentSettings', dataToSave),
-        saveFirestoreSetting('settings', dbState.settings || {})
-      ]);
-    } else if (collectionOrKey === 'privacySecurity' || collectionOrKey === 'privacySecuritySettings') {
-      const dataToSave = dbState.privacySecuritySettings || dbState.privacySecurity;
-      if (dataToSave) {
-        dbState.privacySecuritySettings = dataToSave;
-        dbState.privacySecurity = dataToSave;
-        await Promise.allSettled([
-          saveFirestoreSetting('privacySecurity', dataToSave),
-          saveFirestoreSetting('privacySecuritySettings', dataToSave)
-        ]);
-      }
-    } else if (collectionOrKey === 'aboutUs') {
-      if (dbState.aboutUs) {
-        await saveFirestoreSetting('aboutUs', dbState.aboutUs);
-      }
-    } else if (collectionOrKey === 'founder') {
-      if (dbState.founder) {
-        await saveFirestoreSetting('founder', dbState.founder);
-      }
-    } else if (collectionOrKey === 'contactSettings') {
-      if (dbState.contactSettings) {
-        await saveFirestoreSetting('contactSettings', dbState.contactSettings);
-      }
-    } else if (collectionOrKey === 'companyProfile') {
-      if (dbState.companyProfile) {
-        await saveFirestoreSetting('companyProfile', dbState.companyProfile);
-      }
-    } else if (dbState[collectionOrKey] !== undefined) {
-      await saveFirestoreSetting(collectionOrKey, dbState[collectionOrKey]);
-    }
-    return;
-  }
-
-  // Check if it's an entity collection
-  if ((ENTITY_COLLECTIONS as readonly string[]).includes(collectionOrKey)) {
-    if (['employeeKYC', 'employeePayroll', 'employeeAccounts'].includes(collectionOrKey)) {
-      const map = dbState[collectionOrKey];
-      if (id && map) {
-        const item = map[id];
-        if (item) {
-          await saveFirestoreDoc(collectionOrKey, String(id), item);
-        } else {
-          await deleteFirestoreDoc(collectionOrKey, String(id));
-        }
-      } else if (map && typeof map === 'object') {
-        const promises = Object.entries(map).map(([k, item]) => {
-          if (item && typeof item === 'object') {
-            return saveFirestoreDoc(collectionOrKey, String(k), item);
-          }
-          return Promise.resolve();
-        });
-        await Promise.allSettled(promises);
-      }
-      return;
-    }
-
-    if (id) {
-      const list = dbState[collectionOrKey];
-      if (Array.isArray(list)) {
-        const item = list.find((x: any) => String(x.id) === String(id));
-        if (item) {
-          await saveFirestoreDoc(collectionOrKey, String(id), item);
-        } else {
-          await deleteFirestoreDoc(collectionOrKey, String(id));
-        }
-      }
-    } else {
-      // Collection-wide sync
-      const list = dbState[collectionOrKey];
-      if (Array.isArray(list)) {
-        const savePromises = list.map((item: any) => {
+    for (const coll of ENTITY_COLLECTIONS) {
+      if (Array.isArray(state[coll])) {
+        for (const item of state[coll]) {
           if (item && item.id) {
-            return saveFirestoreDoc(collectionOrKey, String(item.id), item);
+            await saveEntityToD1(coll, String(item.id), item);
           }
-          return Promise.resolve();
-        });
-        await Promise.allSettled(savePromises);
+        }
+      }
+    }
+    return;
+  }
+
+  // If it's a setting key
+  if (SETTING_KEYS.includes(collectionOrKey as any)) {
+    if (state[collectionOrKey] !== undefined) {
+      await saveSettingToD1(collectionOrKey, state[collectionOrKey]);
+    }
+    return;
+  }
+
+  // If it's an entity collection with a specific item ID
+  if (ENTITY_COLLECTIONS.includes(collectionOrKey as any)) {
+    const list = state[collectionOrKey];
+    if (Array.isArray(list)) {
+      if (id) {
+        const item = list.find((x: any) => x && String(x.id) === String(id));
+        if (item) {
+          await saveEntityToD1(collectionOrKey, String(id), item);
+        } else {
+          // If deleted from array
+          await deleteEntityFromD1(collectionOrKey, String(id));
+        }
+      } else {
+        // Persist all items in collection
+        for (const item of list) {
+          if (item && item.id) {
+            await saveEntityToD1(collectionOrKey, String(item.id), item);
+          }
+        }
       }
     }
   }
+}
+
+// Dummy export for backward compatibility
+export function getFirestoreDb() {
+  return null;
 }

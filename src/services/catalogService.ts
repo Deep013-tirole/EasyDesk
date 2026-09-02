@@ -30,14 +30,17 @@ function sanitizeCachedData<T>(key: string, data: T): T {
 (function purgeLegacyDemoCaches() {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const purgedFlag = localStorage.getItem('easydesk_cache_synced_v5');
+    const purgedFlag = localStorage.getItem('easydesk_cache_synced_v7');
     if (!purgedFlag) {
       localStorage.removeItem(CATALOG_CACHE_KEYS.SERVICES);
       localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES);
       localStorage.removeItem(CATALOG_CACHE_KEYS.CATEGORIES_ALL);
       localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES);
       localStorage.removeItem(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL);
-      localStorage.setItem('easydesk_cache_synced_v5', 'true');
+      localStorage.removeItem(CATALOG_CACHE_KEYS.BLOGS);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.REVIEWS);
+      localStorage.removeItem(CATALOG_CACHE_KEYS.LAST_UPDATED);
+      localStorage.setItem('easydesk_cache_synced_v7', 'true');
     }
   } catch {}
 })();
@@ -167,8 +170,11 @@ export async function fetchWithCache<T>(
     try {
       const firestoreData = await directFirestoreLoader();
       if (firestoreData !== null && firestoreData !== undefined) {
-        setCachedCatalog(cacheKey, firestoreData);
-        return { data: firestoreData, isCached: false };
+        const isArray = Array.isArray(firestoreData);
+        if (!isArray || firestoreData.length > 0) {
+          setCachedCatalog(cacheKey, firestoreData);
+          return { data: firestoreData, isCached: false };
+        }
       }
     } catch (fsErr: any) {
       const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
