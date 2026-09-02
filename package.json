@@ -7,6 +7,9 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
+    "deploy": "bun run build && wrangler deploy",
+    "deploy:cf": "bun run build && wrangler deploy",
+    "cf:provision-r2": "wrangler r2 bucket create easydesk-prod-storage",
     "clean": "rm -rf dist db_store.json",
     "lint": "tsc --noEmit"
   },
