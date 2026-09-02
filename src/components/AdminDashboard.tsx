@@ -5,7 +5,8 @@ import {
   Layers, Image, HelpCircle, Star, Edit, Shield, Activity, BellRing, 
   Lock, LogOut, Check, Info, FileCode, CheckCircle2, AlertCircle, 
   Copy, FolderOpen, Search, Filter, UploadCloud, CopyCheck, ArrowUpDown,
-  Building2, Phone, CreditCard, Sliders, Key, ShieldCheck, Globe, Loader2
+  Building2, Phone, CreditCard, Sliders, Key, ShieldCheck, Globe, Loader2,
+  UserPlus
 } from 'lucide-react';
 import { Order, SupportTicket, Coupon, Review, User, OrderStatus, PaymentStatus, UserRole, Service, Blog, CalendarEvent, MasterData, ServiceCategory, BlogCategory } from '../types.js';
 import { fetchCsrfToken, adminFetch, safeParseJsonResponse } from '../lib/apiClient.js';
@@ -133,6 +134,11 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
 
   // Simple Action Notification Banner
   const [actionNotif, setActionNotif] = useState<string | null>(null);
+
+  // Security Access & Users Filter state
+  const [userTabFilter, setUserTabFilter] = useState<'staff' | 'customers' | 'all'>('staff');
+  const [userTabSearch, setUserTabSearch] = useState('');
+  const [isPurgingTests, setIsPurgingTests] = useState(false);
 
   // Modern Service & Blog CMS Editor state
   const [isServiceEditorOpen, setIsServiceEditorOpen] = useState(false);
@@ -640,12 +646,17 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
   // 3. Status Badge Styling
   const getRoleBadgeStyle = (role: UserRole | string) => {
     switch (role) {
+      case 'SUPER_ADMIN':
+        return 'bg-purple-100 text-purple-800 border-purple-300 font-bold';
       case UserRole.ADMIN:
       case 'ADMIN':
-      case 'SUPER_ADMIN':
-        return 'bg-blue-50 text-blue-700 border-blue-100';
+        return 'bg-blue-100 text-blue-800 border-blue-300 font-semibold';
+      case 'OPERATOR':
+        return 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
+      case 'STAFF':
+        return 'bg-cyan-100 text-cyan-800 border-cyan-300 font-semibold';
       default:
-        return 'bg-slate-50 text-slate-700 border-slate-100';
+        return 'bg-slate-100 text-slate-700 border-slate-200 font-medium';
     }
   };
 
@@ -970,6 +981,35 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
       }
     } catch (err: any) {
       triggerAlert(err.message || 'Delete request failed.');
+    }
+  };
+
+  const handlePurgeTestAccounts = async () => {
+    if (!window.confirm('Are you sure you want to clean up automated test/dummy accounts? The primary Super Admin (Deepak: tideepak8@gmail.com) and all verified administrative staff will be preserved.')) {
+      return;
+    }
+    setIsPurgingTests(true);
+    try {
+      const res = await adminFetch('/api/admin/users/cleanup-test-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updaterId: adminUser?.id,
+          updaterName: adminUser?.name,
+          updaterRole: adminUser?.role
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        triggerAlert(data.message || 'Purged test accounts successfully.');
+        fetchTabData();
+      } else {
+        alert(data.message || 'Failed to clean test accounts.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Network error.');
+    } finally {
+      setIsPurgingTests(false);
     }
   };
 
@@ -1552,7 +1592,7 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                   onClick={() => setActiveTab('users')}
                   className={`w-full text-left p-2.5 rounded-xl transition flex items-center gap-2 ${activeTab === 'users' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
                 >
-                  <Users className="w-4 h-4" /> Customer Accounts
+                  <Users className="w-4 h-4" /> Security & Role Access
                 </button>
                 <button
                   onClick={() => setActiveTab('audit')}
@@ -2512,65 +2552,209 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
             </div>
           )}
 
-          {/* Active Tab 9: Account Manager */}
-          {activeTab === 'users' && (
-            <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-150">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-xs text-slate-900 leading-none">Security Access Role Manager</h3>
-                  <p className="text-[9px] text-slate-400 mt-1">Create admin personnel, assign roles, or manage suspended accounts</p>
-                </div>
-                <button
-                  onClick={() => openAddForm('user')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition"
-                >
-                  Create Security User
-                </button>
-              </div>
+          {/* Active Tab 9: Security Access Role Manager */}
+          {activeTab === 'users' && (() => {
+            const superAdminUser = allUsersList.find(u => (u.email || '').toLowerCase().trim() === 'tideepak8@gmail.com' || u.role === 'SUPER_ADMIN') || {
+              name: 'Deepak',
+              email: 'tideepak8@gmail.com',
+              role: 'SUPER_ADMIN',
+              mobile: '+91 99999 99999',
+              createdAt: '2023-01-01T00:00:00.000Z'
+            };
 
-              <div className="overflow-x-auto text-xs">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[9px]">
-                      <th className="p-3">User Name</th>
-                      <th className="p-3">Email Address</th>
-                      <th className="p-3">Mobile</th>
-                      <th className="p-3">Authorization Role</th>
-                      <th className="p-3">Suspension</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 font-medium">
-                    {allUsersList.map(user => (
-                      <tr key={user.id} className="hover:bg-slate-50/40 transition">
-                        <td className="p-3 font-bold text-slate-900">{user.name}</td>
-                        <td className="p-3 font-mono text-slate-600">{user.email}</td>
-                        <td className="p-3 font-mono text-slate-500">{user.mobile || '—'}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${getRoleBadgeStyle(user.role)}`}>
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          {user.isSuspended ? (
-                            <span className="text-red-600 bg-red-50 px-2 py-0.5 border border-red-100 rounded text-[9px] font-bold">Suspended</span>
-                          ) : (
-                            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[9px] font-bold">Active</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right space-x-2">
-                          <button onClick={() => openEditForm('user', user)} className="text-blue-600 hover:underline">Edit</button>
-                          {isSuper && (
-                            <button onClick={() => handleDeleteItem('user', user.id)} className="text-red-500 hover:underline">Delete</button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            const staffList = allUsersList.filter(u => ['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'STAFF'].includes(String(u.role).toUpperCase()) || (u.role as any) === UserRole.ADMIN);
+            const customerList = allUsersList.filter(u => !['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'STAFF'].includes(String(u.role).toUpperCase()) && (u.role as any) !== UserRole.ADMIN);
+
+            const filteredList = allUsersList.filter(u => {
+              const isStaff = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'STAFF'].includes(String(u.role).toUpperCase()) || (u.role as any) === UserRole.ADMIN;
+              if (userTabFilter === 'staff' && !isStaff) return false;
+              if (userTabFilter === 'customers' && isStaff) return false;
+
+              if (userTabSearch) {
+                const query = userTabSearch.toLowerCase().trim();
+                const match = (u.name && u.name.toLowerCase().includes(query)) ||
+                  (u.email && u.email.toLowerCase().includes(query)) ||
+                  (u.mobile && u.mobile.toLowerCase().includes(query)) ||
+                  (u.role && String(u.role).toLowerCase().includes(query));
+                if (!match) return false;
+              }
+              return true;
+            });
+
+            return (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                {/* Platform Root Super Admin Authority Card */}
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center shrink-0 shadow-inner">
+                      <ShieldCheck className="w-6 h-6 text-purple-300" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded border border-purple-500/40">
+                          Sole Super Admin (Root)
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Protected
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-base text-white mt-1 leading-tight">{superAdminUser.name || 'Deepak'}</h3>
+                      <p className="text-xs text-slate-300 font-mono mt-0.5 flex items-center gap-2">
+                        <span>{superAdminUser.email}</span>
+                        {superAdminUser.mobile && <span className="text-slate-400">• {superAdminUser.mobile}</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isSuper && (
+                      <button
+                        onClick={handlePurgeTestAccounts}
+                        disabled={isPurgingTests}
+                        className="bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 border border-slate-700 text-xs font-semibold px-3 py-2 rounded-xl cursor-pointer transition flex items-center gap-1.5"
+                        title="Remove automated test/mock accounts"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+                        {isPurgingTests ? 'Purging...' : 'Clean Test Accounts'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openAddForm('user')}
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer transition shadow-sm flex items-center gap-1.5"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Create Security User
+                    </button>
+                  </div>
+                </div>
+
+                {/* Account Category Tabs & Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setUserTabFilter('staff')}
+                    className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${userTabFilter === 'staff' ? 'bg-blue-50/80 border-blue-200 shadow-xs' : 'bg-white border-slate-200/80 hover:bg-slate-50'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Staff & Administrators</span>
+                      <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{staffList.length}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 mt-1">Authorized Team Members</p>
+                  </button>
+
+                  <button
+                    onClick={() => setUserTabFilter('customers')}
+                    className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${userTabFilter === 'customers' ? 'bg-blue-50/80 border-blue-200 shadow-xs' : 'bg-white border-slate-200/80 hover:bg-slate-50'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Customer Accounts</span>
+                      <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{customerList.length}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 mt-1">Registered Platform Clients</p>
+                  </button>
+
+                  <button
+                    onClick={() => setUserTabFilter('all')}
+                    className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${userTabFilter === 'all' ? 'bg-blue-50/80 border-blue-200 shadow-xs' : 'bg-white border-slate-200/80 hover:bg-slate-50'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">All System Accounts</span>
+                      <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{allUsersList.length}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 mt-1">Complete User Directory</p>
+                  </button>
+                </div>
+
+                {/* Table Container */}
+                <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="p-3.5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-xs text-slate-900 leading-none">
+                        {userTabFilter === 'staff' ? 'Staff & Administrative Personnel' : userTabFilter === 'customers' ? 'Customer Accounts Directory' : 'All Platform Accounts'}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-medium">({filteredList.length} total)</span>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search by name, email, role..."
+                        value={userTabSearch}
+                        onChange={(e) => setUserTabSearch(e.target.value)}
+                        className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[9px]">
+                          <th className="p-3">User Name</th>
+                          <th className="p-3">Email Address</th>
+                          <th className="p-3">Contact Mobile</th>
+                          <th className="p-3">Authorization Role</th>
+                          <th className="p-3">Account Status</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 font-medium">
+                        {filteredList.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
+                              No user records found matching the current criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredList.map(user => {
+                            const isDeepakRoot = (user.email || '').toLowerCase().trim() === 'tideepak8@gmail.com' || user.id === 'super-admin-deepak';
+                            return (
+                              <tr key={user.id} className={`hover:bg-slate-50/60 transition ${isDeepakRoot ? 'bg-purple-50/20' : ''}`}>
+                                <td className="p-3 font-bold text-slate-900">
+                                  <div className="flex items-center gap-2">
+                                    <span>{user.name}</span>
+                                    {isDeepakRoot && (
+                                      <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded border border-purple-200">
+                                        ROOT
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3 font-mono text-slate-600">{user.email}</td>
+                                <td className="p-3 font-mono text-slate-500">{user.mobile || '—'}</td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${getRoleBadgeStyle(user.role)}`}>
+                                    {user.role}
+                                  </span>
+                                </td>
+                                <td className="p-3">
+                                  {user.isSuspended ? (
+                                    <span className="text-red-600 bg-red-50 px-2 py-0.5 border border-red-100 rounded text-[9px] font-bold">Suspended</span>
+                                  ) : (
+                                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[9px] font-bold">Active</span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right space-x-2">
+                                  <button onClick={() => openEditForm('user', user)} className="text-blue-600 hover:underline font-semibold">
+                                    Edit
+                                  </button>
+                                  {isSuper && !isDeepakRoot && (
+                                    <button onClick={() => handleDeleteItem('user', user.id)} className="text-red-500 hover:underline font-semibold">
+                                      Delete
+                                    </button>
+                                  )}
+                                  {isDeepakRoot && (
+                                    <span className="text-[10px] text-slate-400 italic">Protected</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Active Tab 10: Alert Dispatcher */}
           {activeTab === 'notifications' && (
@@ -3163,10 +3347,19 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
                         name="userRole"
                         value={formData.role}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        disabled={formData.email?.toLowerCase().trim() === 'tideepak8@gmail.com'}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-bold"
                       >
-                        <option value="ADMIN">Administrator</option>
-                        <option value="USER">Customer / User</option>
+                        {formData.email?.toLowerCase().trim() === 'tideepak8@gmail.com' ? (
+                          <option value="SUPER_ADMIN">Sole Super Admin (Root)</option>
+                        ) : (
+                          <>
+                            <option value="ADMIN">Administrator</option>
+                            <option value="OPERATOR">Operator</option>
+                            <option value="STAFF">Support Staff</option>
+                            <option value="USER">Customer / User</option>
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>

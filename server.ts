@@ -2182,25 +2182,96 @@ function normalizeDatabaseRelationships() {
     }
   }
 
-  // 5. Normalize and Seed Admins - Preserve all custom admins and updated passwords
+  // 5. Normalize and Seed Admins - Strictly enforce ONLY 1 Super Admin (Deepak: tideepak8@gmail.com) and clean obsolete mock accounts
   if (!Array.isArray(dbState.admins)) {
     dbState.admins = [];
   }
 
-  dbState.admins.forEach((admin: any) => {
-    admin.id = admin.id || `admin-${Date.now()}`;
-    admin.name = admin.name || 'Admin User';
-    admin.role = admin.role || 'ADMIN';
-    admin.status = admin.status || 'Active';
-    if (!admin.permissions || !Array.isArray(admin.permissions)) {
-      admin.permissions = admin.role === 'SUPER_ADMIN' ? ['*'] : [];
-    }
+  const MOCK_EMAILS_TO_PURGE = new Set([
+    'superadmin@easydesk.com',
+    'ananya@easydesk.com',
+    'admin@easydesk.com',
+    'siddharth@easydesk.com',
+    'operator@easydesk.com',
+    'ramesh@easydesk.com'
+  ]);
+
+  // Remove mock admins
+  dbState.admins = dbState.admins.filter((a: any) => {
+    const email = (a.email || '').toLowerCase().trim();
+    return !MOCK_EMAILS_TO_PURGE.has(email);
   });
 
-  // Ensure users list is an array
+  const adminMap = new Map<string, any>();
+  dbState.admins.forEach((admin: any) => {
+    const email = (admin.email || '').toLowerCase().trim();
+    if (!email) return;
+    
+    admin.id = admin.id || `admin-${Date.now()}`;
+    admin.name = admin.name || 'Admin User';
+    admin.status = admin.status || 'Active';
+
+    if (email === 'tideepak8@gmail.com') {
+      admin.id = 'super-admin-deepak';
+      admin.name = admin.name && admin.name !== 'Admin User' ? admin.name : 'Deepak';
+      admin.role = 'SUPER_ADMIN';
+      admin.permissions = ['*'];
+    } else {
+      // Strictly only ONE Super Admin is permitted across the platform
+      if (admin.role === 'SUPER_ADMIN') {
+        admin.role = 'ADMIN';
+      }
+      if (!admin.permissions || !Array.isArray(admin.permissions)) {
+        admin.permissions = [];
+      }
+    }
+    adminMap.set(email, admin);
+  });
+
+  // Ensure canonical super admin Deepak exists
+  if (!adminMap.has('tideepak8@gmail.com')) {
+    adminMap.set('tideepak8@gmail.com', { ...PRESEEDED_ADMINS[0] });
+  }
+
+  dbState.admins = Array.from(adminMap.values());
+
+  // Deduplicate and clean dbState.users
   if (!Array.isArray(dbState.users)) {
     dbState.users = [];
   }
+
+  dbState.users = dbState.users.filter((u: any) => {
+    const email = (u.email || '').toLowerCase().trim();
+    return !MOCK_EMAILS_TO_PURGE.has(email);
+  });
+
+  const cleanUserMap = new Map<string, any>();
+  dbState.users.forEach((u: any) => {
+    const email = (u.email || '').toLowerCase().trim();
+    if (!email) return;
+    if (email === 'tideepak8@gmail.com') {
+      u.id = 'super-admin-deepak';
+      u.name = u.name && u.name !== 'Admin User' ? u.name : 'Deepak';
+      u.role = 'SUPER_ADMIN';
+      u.isSuspended = false;
+    } else if (u.role === 'SUPER_ADMIN') {
+      u.role = 'ADMIN';
+    }
+    cleanUserMap.set(email, u);
+  });
+
+  if (!cleanUserMap.has('tideepak8@gmail.com')) {
+    cleanUserMap.set('tideepak8@gmail.com', {
+      id: 'super-admin-deepak',
+      name: 'Deepak',
+      email: 'tideepak8@gmail.com',
+      mobile: '+91 99999 99999',
+      role: 'SUPER_ADMIN',
+      createdAt: '2023-01-01T00:00:00.000Z'
+    });
+  }
+
+  dbState.users = Array.from(cleanUserMap.values());
 
   // Ensure every customer in dbState.customers has a valid bcrypt password
   if (Array.isArray(dbState.customers)) {
@@ -2295,27 +2366,42 @@ async function asyncInitFirestoreDatabase(): Promise<void> {
         dbState.founder = firestoreState.founder;
       }
 
-      // Synchronize users map from loaded admins and customers without overwriting credentials
+      // Synchronize users map from loaded admins and customers without overwriting credentials or creating duplicates
       const userMap = new Map<string, any>();
-      (dbState.users || []).forEach((u: any) => userMap.set(u.id, u));
-      (dbState.customers || []).forEach((c: any) => userMap.set(c.id, { 
-        id: c.id, 
-        name: c.name, 
-        email: c.email, 
-        role: UserRole.USER, 
-        createdAt: c.createdAt, 
-        isSuspended: c.isSuspended, 
-        password: c.password 
-      }));
-      (dbState.admins || []).forEach((a: any) => userMap.set(a.id, { 
-        id: a.id, 
-        name: a.name, 
-        email: a.email, 
-        role: a.role, 
-        createdAt: a.createdAt, 
-        isSuspended: a.isSuspended, 
-        password: a.password 
-      }));
+      (dbState.users || []).forEach((u: any) => {
+        const email = (u.email || '').toLowerCase().trim();
+        if (email) userMap.set(email, u);
+      });
+      (dbState.customers || []).forEach((c: any) => {
+        const email = (c.email || '').toLowerCase().trim();
+        if (!email) return;
+        const existing = userMap.get(email);
+        userMap.set(email, { 
+          id: c.id || existing?.id || `user-${Date.now()}`, 
+          name: c.name || existing?.name || 'Customer', 
+          email: c.email, 
+          mobile: c.mobile || existing?.mobile || '',
+          role: existing?.role || UserRole.USER, 
+          createdAt: c.createdAt || existing?.createdAt || new Date().toISOString(), 
+          isSuspended: !!c.isSuspended, 
+          password: c.password || existing?.password || DEFAULT_PASSWORD_HASH 
+        });
+      });
+      (dbState.admins || []).forEach((a: any) => {
+        const email = (a.email || '').toLowerCase().trim();
+        if (!email) return;
+        const existing = userMap.get(email);
+        userMap.set(email, { 
+          id: a.id || existing?.id || `admin-${Date.now()}`, 
+          name: a.name || existing?.name || 'Admin User', 
+          email: a.email, 
+          mobile: a.mobile || existing?.mobile || '',
+          role: email === 'tideepak8@gmail.com' ? 'SUPER_ADMIN' : (a.role === 'SUPER_ADMIN' ? 'ADMIN' : (a.role || 'ADMIN')), 
+          createdAt: a.createdAt || existing?.createdAt || new Date().toISOString(), 
+          isSuspended: !!a.isSuspended, 
+          password: a.password || existing?.password || DEFAULT_PASSWORD_HASH 
+        });
+      });
       dbState.users = Array.from(userMap.values());
 
       normalizeDatabaseRelationships();
@@ -7875,27 +7961,79 @@ app.delete('/api/admin/notifications/:id', async (req, res) => {
 
 // User Management CRUD
 app.get('/api/admin/users', (req, res) => {
-  res.json(dbState.users);
+  normalizeDatabaseRelationships();
+  let list = [...(dbState.users || [])];
+  const roleFilter = req.query.role as string;
+  const query = (req.query.q as string || '').toLowerCase().trim();
+
+  if (roleFilter) {
+    if (roleFilter === 'staff') {
+      list = list.filter(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' || u.role === 'OPERATOR' || u.role === 'STAFF' || (u.role as any) === UserRole.ADMIN);
+    } else if (roleFilter === 'customers') {
+      list = list.filter(u => u.role === 'USER' || (u.role as any) === UserRole.USER);
+    } else {
+      list = list.filter(u => String(u.role).toUpperCase() === roleFilter.toUpperCase());
+    }
+  }
+
+  if (query) {
+    list = list.filter(u => 
+      (u.name && u.name.toLowerCase().includes(query)) ||
+      (u.email && u.email.toLowerCase().includes(query)) ||
+      (u.mobile && u.mobile.toLowerCase().includes(query)) ||
+      (u.role && String(u.role).toLowerCase().includes(query))
+    );
+  }
+
+  res.json(list);
 });
 
 app.post('/api/admin/users', async (req, res) => {
   const { user, updaterId, updaterName, updaterRole } = req.body;
   if (!user || !user.name || !user.email) return res.status(400).json({ message: 'Name and email are required' });
   
-  const exists = dbState.users.some(u => u.email.toLowerCase() === user.email.toLowerCase());
+  const normalizedEmail = user.email.toLowerCase().trim();
+  const exists = dbState.users.some(u => u.email.toLowerCase().trim() === normalizedEmail);
   if (exists) return res.status(400).json({ message: 'A user with this email already exists' });
+
+  // Only Deepak is allowed to have SUPER_ADMIN role
+  let assignedRole = user.role || UserRole.USER;
+  if (assignedRole === 'SUPER_ADMIN' && normalizedEmail !== 'tideepak8@gmail.com') {
+    assignedRole = 'ADMIN';
+  }
   
   const newUser = {
     id: `user-${Date.now()}`,
-    name: user.name,
-    email: user.email,
+    name: user.name.trim(),
+    email: normalizedEmail,
     mobile: user.mobile || '9999999999',
-    role: user.role || UserRole.USER,
+    role: assignedRole,
     isSuspended: !!user.isSuspended,
     createdAt: new Date().toISOString()
   };
+
   dbState.users.push(newUser);
-  logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_CREATE', `Created user/admin record: ${newUser.name} with role ${newUser.role}`);
+
+  // If role is administrative, also sync to dbState.admins
+  if (['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'STAFF'].includes(assignedRole)) {
+    if (!Array.isArray(dbState.admins)) dbState.admins = [];
+    if (!dbState.admins.some(a => a.email.toLowerCase().trim() === normalizedEmail)) {
+      dbState.admins.push({
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        mobile: newUser.mobile,
+        role: newUser.role,
+        status: newUser.isSuspended ? 'Suspended' : 'Active',
+        permissions: newUser.role === 'SUPER_ADMIN' ? ['*'] : [],
+        password: DEFAULT_PASSWORD_HASH,
+        createdAt: newUser.createdAt
+      });
+      await persistDatabase('admins', newUser.id);
+    }
+  }
+
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_CREATE', `Created user/admin record: ${newUser.name} with role ${newUser.role}`);
   await persistDatabase('users', newUser.id);
   res.status(201).json(newUser);
 });
@@ -7905,8 +8043,33 @@ app.put('/api/admin/users/:id', async (req, res) => {
   const idx = dbState.users.findIndex(u => u.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'User not found' });
   
+  const current = dbState.users[idx];
+  const targetEmail = (user.email || current.email).toLowerCase().trim();
+
+  // Protect the primary Super Admin
+  if (current.email.toLowerCase().trim() === 'tideepak8@gmail.com') {
+    user.role = 'SUPER_ADMIN';
+    user.isSuspended = false;
+  } else if (user.role === 'SUPER_ADMIN' && targetEmail !== 'tideepak8@gmail.com') {
+    user.role = 'ADMIN';
+  }
+
   dbState.users[idx] = { ...dbState.users[idx], ...user };
-  logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_UPDATE', `Updated user/admin profile: ${dbState.users[idx].name} (Role: ${dbState.users[idx].role})`);
+
+  // Sync with admins collection
+  if (Array.isArray(dbState.admins)) {
+    const adminIdx = dbState.admins.findIndex(a => a.id === req.params.id || a.email.toLowerCase().trim() === targetEmail);
+    if (adminIdx >= 0) {
+      dbState.admins[adminIdx].name = dbState.users[idx].name;
+      dbState.admins[adminIdx].email = dbState.users[idx].email;
+      dbState.admins[adminIdx].mobile = dbState.users[idx].mobile;
+      dbState.admins[adminIdx].role = dbState.users[idx].role;
+      dbState.admins[adminIdx].status = dbState.users[idx].isSuspended ? 'Suspended' : 'Active';
+      await persistDatabase('admins', dbState.admins[adminIdx].id);
+    }
+  }
+
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_UPDATE', `Updated user/admin profile: ${dbState.users[idx].name} (Role: ${dbState.users[idx].role})`);
   await persistDatabase('users', req.params.id);
   res.json(dbState.users[idx]);
 });
@@ -7916,10 +8079,59 @@ app.delete('/api/admin/users/:id', async (req, res) => {
   const targetUser = dbState.users.find(u => u.id === req.params.id);
   if (!targetUser) return res.status(404).json({ message: 'User not found' });
   
+  // Prevent deleting the primary Super Admin
+  if (targetUser.email.toLowerCase().trim() === 'tideepak8@gmail.com' || targetUser.id === 'super-admin-deepak') {
+    return res.status(403).json({ message: 'The primary Super Admin account (Deepak) is protected and cannot be deleted.' });
+  }
+
   dbState.users = dbState.users.filter(u => u.id !== req.params.id);
-  logSystemAction(updaterId || 'super-admin-1', updaterName || 'Devendra Sharma', updaterRole || 'SUPER_ADMIN', 'USER_DELETE', `Permanently deleted user/admin record: ${targetUser.name}`);
+  
+  // Also remove from admins and customers if present
+  if (Array.isArray(dbState.admins)) {
+    dbState.admins = dbState.admins.filter(a => a.id !== req.params.id && a.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim());
+    await persistDatabase('admins', req.params.id);
+  }
+  if (Array.isArray(dbState.customers)) {
+    dbState.customers = dbState.customers.filter(c => c.id !== req.params.id && c.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim());
+    await persistDatabase('customers', req.params.id);
+  }
+
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USER_DELETE', `Permanently deleted user record: ${targetUser.name}`);
   await persistDatabase('users', req.params.id);
-  res.json({ message: 'User deleted' });
+  res.json({ message: 'User deleted successfully' });
+});
+
+// Purge test / mock accounts endpoint
+app.post('/api/admin/users/cleanup-test-accounts', async (req, res) => {
+  const { updaterId, updaterName, updaterRole } = req.body;
+  const initialCount = dbState.users.length;
+  
+  // Keep Deepak and non-test real accounts
+  dbState.users = dbState.users.filter(u => {
+    const email = (u.email || '').toLowerCase().trim();
+    if (email === 'tideepak8@gmail.com') return true;
+    if (email.startsWith('testuser_') || email.startsWith('rohan_') || email.includes('testuser') || email.includes('example.com') || email === 'user@easydesk.com') {
+      return false;
+    }
+    return true;
+  });
+
+  // Also clean customers
+  if (Array.isArray(dbState.customers)) {
+    dbState.customers = dbState.customers.filter(c => {
+      const email = (c.email || '').toLowerCase().trim();
+      return !email.startsWith('testuser_') && !email.startsWith('rohan_') && !email.includes('testuser') && email !== 'user@easydesk.com';
+    });
+  }
+
+  const purgedCount = initialCount - dbState.users.length;
+  normalizeDatabaseRelationships();
+  await persistDatabase('users');
+  await persistDatabase('customers');
+  await persistDatabase('admins');
+
+  logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'USERS_PURGED', `Purged ${purgedCount} automated test/mock accounts.`);
+  res.json({ message: `Purged ${purgedCount} test and mock accounts successfully.`, remainingCount: dbState.users.length });
 });
 
 
