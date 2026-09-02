@@ -10,24 +10,8 @@
     "iconv-lite": "./src/shims/iconv-lite.cjs"
   },
   "vars": {
-    "NODE_ENV": "production",
-    "STORAGE_PROVIDER": "r2",
-    "DB_PROVIDER": "d1"
+    "NODE_ENV": "production"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "easydesk-prod-db",
-      "database_id": "ai-studio-easydesk-d1"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "STORAGE",
-      "bucket_name": "easydesk-prod-storage",
-      "preview_bucket_name": "easydesk-preview-storage"
-    }
-  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
