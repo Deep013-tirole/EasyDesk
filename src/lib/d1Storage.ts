@@ -156,7 +156,7 @@ export async function initD1Schema(dbInstance?: any): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_entities_collection ON entities(collection);`,
     `CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at);`,
 
-    // 4. File / Media Registry for R2 Storage
+    // 4. File / Media Registry for Firebase Storage & R2 Object Store
     `CREATE TABLE IF NOT EXISTS r2_files (
       key TEXT PRIMARY KEY,
       filename TEXT NOT NULL,
@@ -165,7 +165,25 @@ export async function initD1Schema(dbInstance?: any): Promise<void> {
       folder TEXT DEFAULT 'media',
       metadata TEXT,
       created_at INTEGER NOT NULL
-    );`
+    );`,
+
+    // 5. Media & Upload Metadata Registry
+    `CREATE TABLE IF NOT EXISTS media_files (
+      file_id TEXT PRIMARY KEY,
+      storage_path TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      access_level TEXT DEFAULT 'public',
+      owner_id TEXT,
+      download_url TEXT NOT NULL,
+      folder TEXT DEFAULT 'media',
+      metadata TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_media_files_path ON media_files(storage_path);`,
+    `CREATE INDEX IF NOT EXISTS idx_media_files_owner ON media_files(owner_id);`
   ];
 
   try {
@@ -675,3 +693,90 @@ export async function deleteR2File(key: string, env?: CloudflareEnv): Promise<bo
 
   return false;
 }
+
+/**
+ * Saves media file metadata directly to Cloudflare D1 media_files table.
+ * All structured file metadata persists strictly in D1.
+ */
+export async function saveMediaFileMetadataToD1(
+  meta: {
+    fileId: string;
+    storagePath: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    downloadUrl: string;
+    accessLevel?: 'public' | 'restricted' | 'private';
+    ownerId?: string;
+    folder?: string;
+    metadata?: Record<string, any>;
+  },
+  dbInstance?: any
+): Promise<boolean> {
+  const db = dbInstance || getD1Database();
+  if (!db || !meta.fileId || !meta.storagePath) return false;
+
+  try {
+    await initD1Schema(db);
+    const now = Date.now();
+    const stmt = db.prepare(`
+      INSERT INTO media_files (
+        file_id, storage_path, filename, mime_type, size_bytes, 
+        access_level, owner_id, download_url, folder, metadata, 
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(file_id) DO UPDATE SET
+        storage_path = excluded.storage_path,
+        filename = excluded.filename,
+        mime_type = excluded.mime_type,
+        size_bytes = excluded.size_bytes,
+        access_level = excluded.access_level,
+        owner_id = excluded.owner_id,
+        download_url = excluded.download_url,
+        folder = excluded.folder,
+        metadata = excluded.metadata,
+        updated_at = excluded.updated_at
+    `);
+
+    await stmt.bind(
+      meta.fileId,
+      meta.storagePath,
+      meta.filename,
+      meta.mimeType,
+      meta.sizeBytes || 0,
+      meta.accessLevel || 'public',
+      meta.ownerId || null,
+      meta.downloadUrl,
+      meta.folder || 'media',
+      meta.metadata ? JSON.stringify(meta.metadata) : null,
+      now,
+      now
+    ).run();
+
+    return true;
+  } catch (err) {
+    console.error('[D1] Error saving media file metadata:', err);
+    return false;
+  }
+}
+
+/**
+ * Deletes media file metadata from Cloudflare D1.
+ */
+export async function deleteMediaFileMetadataFromD1(
+  fileId: string,
+  dbInstance?: any
+): Promise<boolean> {
+  const db = dbInstance || getD1Database();
+  if (!db || !fileId) return false;
+
+  try {
+    await initD1Schema(db);
+    await db.prepare('DELETE FROM media_files WHERE file_id = ?').bind(fileId).run();
+    return true;
+  } catch (err) {
+    console.error('[D1] Error deleting media file metadata:', err);
+    return false;
+  }
+}
+

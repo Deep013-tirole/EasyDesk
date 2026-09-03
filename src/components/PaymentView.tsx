@@ -7,7 +7,7 @@ import {
 import { motion } from 'motion/react';
 import { PaymentConfig, PaymentMethod, User } from '../types.js';
 import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
-import { getClientPaymentConfig } from '../lib/firestoreClientService.js';
+import { getClientPaymentConfig } from '../lib/apiDataService.js';
 
 const DEFAULT_PAYMENT_CONFIG: PaymentConfig = {
   upiId: 'easydesk@sbi',

@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { FAQItem } from '../types.js';
 import { openGeneralWhatsApp } from '../lib/whatsapp.js';
 import { safeParseJsonResponse } from '../lib/apiClient.js';
-import { getClientAboutUs } from '../lib/firestoreClientService.js';
+import { getClientAboutUs } from '../lib/apiDataService.js';
 
 interface AboutUsData {
   aboutText: string;

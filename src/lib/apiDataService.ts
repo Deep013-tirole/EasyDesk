@@ -341,8 +341,3 @@ export async function saveClientSetting(settingKey: string, data: any): Promise<
     return false;
   }
 }
-
-// Aliases for backwards compatibility
-export const saveClientFirestoreDoc = saveClientDoc;
-export const deleteClientFirestoreDoc = deleteClientDoc;
-export const saveClientFirestoreSetting = saveClientSetting;

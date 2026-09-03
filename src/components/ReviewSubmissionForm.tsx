@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Service, Review } from '../types.js';
 import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
-import { getClientServices } from '../lib/firestoreClientService.js';
+import { getClientServices } from '../lib/apiDataService.js';
 
 interface ReviewSubmissionFormProps {
   initialCustomerId?: string;

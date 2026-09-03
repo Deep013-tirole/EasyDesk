@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { safeParseJsonResponse } from '../lib/apiClient.js';
-import { getClientPrivacySecurity } from '../lib/firestoreClientService.js';
+import { getClientPrivacySecurity } from '../lib/apiDataService.js';
 
 export interface PrivacySecurityData {
   hero: {

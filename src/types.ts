@@ -220,6 +220,8 @@ export interface EmployeeDocument {
   mimeType: string;
   fileSize: string;
   sizeBytes?: number;
+  downloadUrl?: string;
+  storagePath?: string;
   uploadedBy: string;
   uploadedAt: string;
   verificationStatus: 'Pending' | 'Verified' | 'Rejected';
@@ -604,15 +606,19 @@ export interface MediaItem {
   originalName?: string;
   storedName?: string;
   storedFileName?: string;
+  storagePath?: string;
   fileData?: string;
   mimeType?: string;
   type: 'image' | 'document' | 'video' | 'pdf' | 'word' | 'other';
   size: string;
   sizeBytes?: number;
   url: string;
+  downloadUrl?: string;
   folder?: string;
   title?: string;
   altText?: string;
+  accessLevel?: 'public' | 'restricted' | 'private';
+  ownerId?: string;
   uploadedBy?: string;
   createdAt: string;
   updatedAt?: string;

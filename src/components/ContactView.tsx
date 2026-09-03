@@ -8,7 +8,7 @@ import { motion } from 'motion/react';
 import { apiFetch, safeParseJsonResponse } from '../lib/apiClient.js';
 import { openGeneralWhatsApp } from '../lib/whatsapp.js';
 import { BaseCard, BaseCardBody } from './BaseCard.js';
-import { getClientContactSettings } from '../lib/firestoreClientService.js';
+import { getClientContactSettings } from '../lib/apiDataService.js';
 
 interface ContactSettings {
   companyName: string;

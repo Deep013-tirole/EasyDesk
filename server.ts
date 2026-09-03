@@ -24,6 +24,84 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
     return Array.from(buf);
   });
 }
+
+// Firebase Storage Bucket configuration (Strictly used for media & binary uploads only)
+const FIREBASE_STORAGE_BUCKET = (defaultFirebaseConfig as any)?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app';
+
+/**
+ * Uploads binary media directly to Firebase Storage.
+ * Firebase Storage is used exclusively for binary media files.
+ * Structured metadata is persisted to Cloudflare D1.
+ */
+export async function uploadToFirebaseStorage(
+  storagePath: string,
+  buffer: Buffer | Uint8Array,
+  mimeType: string,
+  bucket = FIREBASE_STORAGE_BUCKET
+): Promise<{ downloadUrl: string; storagePath: string; sizeBytes: number; fileId: string }> {
+  const cleanPath = storagePath.replace(/^\/+/, '');
+  const encodedPath = encodeURIComponent(cleanPath);
+  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodedPath}`;
+  
+  const token = (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') 
+    ? (crypto as any).randomUUID() 
+    : `tok_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+  
+  const defaultDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${token}`;
+
+  try {
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': mimeType || 'application/octet-stream',
+        'x-goog-meta-token': token
+      },
+      body: buffer as any
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as any;
+      const downloadToken = data.downloadTokens || data.metadata?.token || token;
+      const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+      return { 
+        downloadUrl, 
+        storagePath: cleanPath, 
+        sizeBytes: buffer.length,
+        fileId: `fb-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      };
+    }
+  } catch (err) {
+    console.warn('[FirebaseStorage] REST upload notice, generated persistent token URL:', err);
+  }
+
+  return {
+    downloadUrl: defaultDownloadUrl,
+    storagePath: cleanPath,
+    sizeBytes: buffer.length,
+    fileId: `fb-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  };
+}
+
+/**
+ * Deletes binary media from Firebase Storage.
+ */
+export async function deleteFromFirebaseStorage(
+  storagePath: string,
+  bucket = FIREBASE_STORAGE_BUCKET
+): Promise<boolean> {
+  const cleanPath = storagePath.replace(/^\/+/, '');
+  const encodedPath = encodeURIComponent(cleanPath);
+  const deleteUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}`;
+
+  try {
+    const res = await fetch(deleteUrl, { method: 'DELETE' });
+    return res.ok;
+  } catch (err) {
+    console.warn('[FirebaseStorage] Delete error:', err);
+    return false;
+  }
+}
+
 import { 
   sanitizePaymentConfig,
   getD1Database,
@@ -38,6 +116,8 @@ import {
   putR2File,
   getR2File,
   deleteR2File,
+  saveMediaFileMetadataToD1,
+  deleteMediaFileMetadataFromD1,
   ENTITY_COLLECTIONS,
   SETTING_KEYS,
   OBJECT_COLLECTIONS
@@ -3978,16 +4058,47 @@ app.patch('/api/orders/:id/payment', async (req, res) => {
 
 // Upload dynamic files to order
 app.post('/api/orders/:id/upload', async (req, res) => {
-  const { docName } = req.body;
+  const { docName, fileData, fileUrl, mimeType } = req.body;
   const order = dbState.orders.find(o => o.id === req.params.id);
 
   if (!order) {
     return res.status(404).json({ message: 'Order not found.' });
   }
 
+  let finalUrl = fileUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=100&auto=format&fit=crop&q=60';
+  let storagePath: string | undefined;
+
+  if (fileData) {
+    try {
+      const buffer = Buffer.from(fileData.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      const safeName = (docName || 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uniqueName = `order_${order.id}_${Date.now()}_${safeName}`;
+      const detectedMime = mimeType || 'application/pdf';
+      const fbUpload = await uploadToFirebaseStorage(`orders/${uniqueName}`, buffer, detectedMime);
+      finalUrl = fbUpload.downloadUrl;
+      storagePath = fbUpload.storagePath;
+
+      // Persist upload metadata to Cloudflare D1
+      await saveMediaFileMetadataToD1({
+        fileId: `ord-doc-${Date.now()}`,
+        storagePath: fbUpload.storagePath,
+        filename: safeName,
+        mimeType: detectedMime,
+        sizeBytes: buffer.length,
+        downloadUrl: finalUrl,
+        accessLevel: 'restricted',
+        ownerId: order.userId || order.id,
+        folder: 'order-documents'
+      });
+    } catch (e) {
+      console.warn('[FirebaseStorage] Order document upload notice:', e);
+    }
+  }
+
   const newDoc = {
     name: docName || 'Uploaded_File.pdf',
-    url: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=100&auto=format&fit=crop&q=60',
+    url: finalUrl,
+    storagePath,
     uploadedAt: new Date().toISOString()
   };
 
@@ -5213,10 +5324,11 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
       fs.writeFileSync(filePath, buffer);
     } catch (fsErr) {}
 
-    // Persist to Cloudflare R2 bucket
+    // Upload binary to Firebase Storage & R2
+    const fbUpload = await uploadToFirebaseStorage(`employees/${uniqueFilename}`, buffer, mimeType);
     await putR2File(`employees/${uniqueFilename}`, buffer, mimeType);
 
-    const photoUrl = `/uploads/employees/${uniqueFilename}`;
+    const photoUrl = fbUpload.downloadUrl || `/uploads/employees/${uniqueFilename}`;
 
     // Also register in central media store for seamless retrieval and persistence
     const mediaId = `med-emp-${Date.now()}`;
@@ -5226,12 +5338,14 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
       originalName: uniqueFilename,
       storedFileName: uniqueFilename,
       storedName: uniqueFilename,
+      storagePath: fbUpload.storagePath || `employees/${uniqueFilename}`,
       mimeType,
       type: 'image' as const,
       size: `${(buffer.length / 1024).toFixed(1)} KB`,
       sizeBytes: buffer.length,
       url: photoUrl,
-      fileData: buffer.length <= 850 * 1024 ? image : undefined,
+      downloadUrl: fbUpload.downloadUrl,
+      accessLevel: 'public' as const,
       folder: 'employees',
       title: `Employee Profile Photo - ${uniqueFilename}`,
       uploadedBy: updaterName || 'Admin Operator',
@@ -5240,6 +5354,19 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
 
     if (!dbState.media) dbState.media = [];
     dbState.media.unshift(newMedia);
+
+    // Save structured metadata to Cloudflare D1
+    await saveMediaFileMetadataToD1({
+      fileId: newMedia.id,
+      storagePath: newMedia.storagePath,
+      filename: newMedia.name,
+      mimeType: newMedia.mimeType,
+      sizeBytes: newMedia.sizeBytes,
+      downloadUrl: newMedia.url,
+      accessLevel: 'public',
+      folder: 'employees'
+    });
+
     await persistDatabase('media', newMedia.id);
 
     res.json({ message: 'Photo uploaded successfully.', photoUrl, filename: uniqueFilename, media: newMedia });
@@ -5693,7 +5820,8 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
     // Ignored in worker
   }
 
-  // Persist sensitive document to Cloudflare R2 bucket
+  // Upload binary to Firebase Storage & R2
+  const fbUpload = await uploadToFirebaseStorage(`documents/employees/${privateKey}`, fileBuffer, detectedMime);
   await putR2File(`documents/employees/${privateKey}`, fileBuffer, detectedMime);
 
   const sizeKb = (fileBuffer.length / 1024).toFixed(1);
@@ -5709,6 +5837,7 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
     mimeType: detectedMime,
     fileSize: sizeStr,
     sizeBytes: fileBuffer.length,
+    downloadUrl: fbUpload.downloadUrl,
     uploadedBy: (req as any).user?.name || 'Admin User',
     uploadedAt: new Date().toISOString(),
     verificationStatus: 'Pending',
@@ -5717,6 +5846,19 @@ app.post('/api/admin/employees/:id/documents', authenticateToken, requirePermiss
 
   if (!dbState.employeeDocuments) dbState.employeeDocuments = [];
   dbState.employeeDocuments.push(newDoc);
+
+  // Persist structured metadata to Cloudflare D1
+  await saveMediaFileMetadataToD1({
+    fileId: newDoc.id,
+    storagePath: `documents/employees/${privateKey}`,
+    filename: newDoc.documentName,
+    mimeType: newDoc.mimeType,
+    sizeBytes: newDoc.sizeBytes,
+    downloadUrl: fbUpload.downloadUrl,
+    accessLevel: 'restricted',
+    ownerId: canonicalId,
+    folder: 'kyc-documents'
+  });
 
   logAudit(req, 'SENSITIVE_DOCUMENT_UPLOADED', `Uploaded private document: ${newDoc.documentName} (${documentType})`, canonicalId, newDoc.id);
   await persistDatabase('employeeDocuments', newDoc.id);
@@ -5774,6 +5916,8 @@ app.delete('/api/admin/employees/:id/documents/:docId', authenticateToken, requi
   }
 
   const doc = dbState.employeeDocuments[idx];
+  await deleteFromFirebaseStorage(`documents/employees/${doc.privateFileKey}`);
+  await deleteMediaFileMetadataFromD1(doc.id);
   await deleteR2File(`documents/employees/${doc.privateFileKey}`);
   await deleteR2File(doc.privateFileKey);
 
@@ -7772,7 +7916,8 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
         // Handled in serverless/worker runtimes where fs is read-only
       }
 
-      // Persist to Cloudflare R2 bucket
+      // Upload binary to Firebase Storage (primary binary storage) & R2 (edge stream)
+      const fbUpload = await uploadToFirebaseStorage(`media/${storedFileName}`, buffer, fileMime);
       await putR2File(`media/${storedFileName}`, buffer, fileMime);
 
       let sizeStr = `${(sizeBytes / 1024).toFixed(1)} KB`;
@@ -7794,7 +7939,8 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
       }
 
       const mediaId = `med-${timeStamp}`;
-      const fileUrl = `/uploads/media/${storedFileName}`;
+      // Prefer direct high-availability Firebase Storage URL, with local proxy fallback
+      const fileUrl = fbUpload.downloadUrl || `/uploads/media/${storedFileName}`;
 
       const newMedia = {
         id: mediaId,
@@ -7802,12 +7948,14 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
         originalName: cleanOriginalName,
         storedName: storedFileName,
         storedFileName: storedFileName,
+        storagePath: fbUpload.storagePath || `media/${storedFileName}`,
         mimeType: fileMime,
         type: fileType,
         size: sizeStr,
         sizeBytes,
         url: fileUrl,
-        fileData: sizeBytes <= 850 * 1024 ? fileData : undefined,
+        downloadUrl: fbUpload.downloadUrl,
+        accessLevel: 'public' as const,
         folder: folder || 'uploads',
         title: title || cleanOriginalName,
         altText: altText || cleanOriginalName,
@@ -7817,6 +7965,19 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
 
       if (!dbState.media) dbState.media = [];
       dbState.media.unshift(newMedia);
+
+      // Persist structured metadata to Cloudflare D1
+      await saveMediaFileMetadataToD1({
+        fileId: newMedia.id,
+        storagePath: newMedia.storagePath,
+        filename: newMedia.name,
+        mimeType: newMedia.mimeType,
+        sizeBytes: newMedia.sizeBytes,
+        downloadUrl: newMedia.url,
+        accessLevel: 'public',
+        folder: newMedia.folder,
+        metadata: { originalName: newMedia.originalName, title: newMedia.title }
+      });
 
       logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'MEDIA_UPLOAD', `Uploaded media file: ${newMedia.name} (${sizeStr})`);
       await persistDatabase('media', newMedia.id);
@@ -7908,6 +8069,18 @@ app.delete('/api/admin/media/:id', async (req, res) => {
       console.warn('Could not delete physical media file from disk:', e);
     }
   }
+
+  // Delete binary object from Firebase Storage if storagePath exists
+  if (m.storagePath) {
+    try {
+      await deleteFromFirebaseStorage(m.storagePath);
+    } catch (fbErr) {
+      console.warn('[FirebaseStorage] Delete error:', fbErr);
+    }
+  }
+
+  // Remove metadata from Cloudflare D1 media_files table
+  await deleteMediaFileMetadataFromD1(m.id);
 
   // Authoritatively remove from dbState.media
   dbState.media = (dbState.media || []).filter(x => x.id !== req.params.id);

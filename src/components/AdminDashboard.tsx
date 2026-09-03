@@ -11,7 +11,7 @@ import {
 import { Order, SupportTicket, Coupon, Review, User, OrderStatus, PaymentStatus, UserRole, Service, Blog, CalendarEvent, MasterData, ServiceCategory, BlogCategory } from '../types.js';
 import { fetchCsrfToken, adminFetch, safeParseJsonResponse } from '../lib/apiClient.js';
 import { hasUserPermission, TAB_PERMISSIONS_MAP } from '../lib/permissions.js';
-import { authenticateAdminDirect, getClientPaymentConfig } from '../lib/firestoreClientService.js';
+import { authenticateAdminDirect, getClientPaymentConfig } from '../lib/apiDataService.js';
 
 // Lazy loaded heavy admin submodules
 const AboutUsAdminModule = lazy(() => import('./admin/AboutUsAdminModule.js'));

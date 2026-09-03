@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, ShieldAlert, ShieldCheck, RefreshCw, Shield, KeyRound, ArrowRight, Sparkles } from 'lucide-react';
 import { User } from '../types.js';
 import { fetchCsrfToken, safeParseJsonResponse } from '../lib/apiClient.js';
-import { authenticateAdminDirect } from '../lib/firestoreClientService.js';
+import { authenticateAdminDirect } from '../lib/apiDataService.js';
 
 interface AuthPortalProps {
   setView: (view: string) => void;

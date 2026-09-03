@@ -13,7 +13,7 @@ import { openWhatsAppForService, openGeneralWhatsApp, onContactSettingsUpdated }
 import { BaseCard, BaseCardBody, BaseCardFooter } from './BaseCard.js';
 import ReviewSubmissionModal from './ReviewSubmissionModal.js';
 import BlogCard from './blog/BlogCard.js';
-import { getClientFaqs } from '../lib/firestoreClientService.js';
+import { getClientFaqs } from '../lib/apiDataService.js';
 
 const STATS = [
   { label: 'Applications Handled', value: '45,280+', desc: 'Across 100+ digital certificate categories' },
