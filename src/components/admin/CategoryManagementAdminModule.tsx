@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Folder, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   XCircle, ArrowUpDown, MoveUp, MoveDown, Layers, BookOpen, 
@@ -69,6 +69,22 @@ export default function CategoryManagementAdminModule({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Inactive'>('ALL');
   const [sortBy, setSortBy] = useState<'order' | 'name-asc' | 'name-desc' | 'items-desc'>('order');
+
+  // Local synced state for instant UI responsiveness
+  const [localCategories, setLocalCategories] = useState<ServiceCategory[]>(categories);
+  const [localBlogCategories, setLocalBlogCategories] = useState<BlogCategory[]>(blogCategories);
+
+  useEffect(() => {
+    if (Array.isArray(categories) && categories.length > 0) {
+      setLocalCategories(categories);
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    if (Array.isArray(blogCategories) && blogCategories.length > 0) {
+      setLocalBlogCategories(blogCategories);
+    }
+  }, [blogCategories]);
 
   // Form modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -146,8 +162,8 @@ export default function CategoryManagementAdminModule({
     return map;
   }, [blogs, blogCategories]);
 
-  // Process list based on active tab
-  const currentList = activeSubTab === 'services' ? categories : blogCategories;
+  // Process list based on active tab using local state for immediate responsiveness
+  const currentList = activeSubTab === 'services' ? localCategories : localBlogCategories;
   const countMap = activeSubTab === 'services' ? serviceCountMap : blogCountMap;
 
   // Filter and Sort
@@ -220,11 +236,15 @@ export default function CategoryManagementAdminModule({
 
   // Auto-generate slug from name
   const handleNameChange = (newName: string) => {
-    const generatedSlug = newName
+    let generatedSlug = newName
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+
+    if (!generatedSlug && newName.trim()) {
+      generatedSlug = `${activeSubTab === 'services' ? 'cat' : 'bcat'}-${Date.now().toString().slice(-6)}`;
+    }
 
     setFormData(prev => ({
       ...prev,
@@ -236,9 +256,18 @@ export default function CategoryManagementAdminModule({
   // Submit Create or Edit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
       alert('Please provide a valid category name.');
       return;
+    }
+
+    let slug = (formData.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!slug) {
+      slug = trimmedName.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+    if (!slug) {
+      slug = `${activeSubTab === 'services' ? 'cat' : 'bcat'}-${Date.now().toString().slice(-6)}`;
     }
 
     setIsSubmitting(true);
@@ -246,22 +275,44 @@ export default function CategoryManagementAdminModule({
     const targetUrl = isEditing ? `${endpoint}/${editingId}` : endpoint;
     const method = isEditing ? 'PUT' : 'POST';
 
+    const categoryPayload = {
+      ...formData,
+      id: isEditing ? (editingId || slug) : slug,
+      name: trimmedName,
+      slug,
+      sortOrder: Number(formData.sortOrder) || (currentList.length + 1)
+    };
+
     try {
       const res = await adminFetch(targetUrl, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category: {
-            ...formData,
-            sortOrder: Number(formData.sortOrder)
-          }
+          category: categoryPayload
         })
       });
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
+        const savedItem = { ...categoryPayload, ...(resData && typeof resData === 'object' ? resData : {}) };
+        if (activeSubTab === 'services') {
+          setLocalCategories(prev => {
+            if (isEditing) {
+              return prev.map(c => (c.id === editingId || c.slug === editingId) ? { ...c, ...savedItem } : c);
+            }
+            return [...prev.filter(c => c.id !== savedItem.id && c.slug !== savedItem.slug), savedItem as ServiceCategory];
+          });
+        } else {
+          setLocalBlogCategories(prev => {
+            if (isEditing) {
+              return prev.map(c => (c.id === editingId || c.slug === editingId) ? { ...c, ...savedItem } : c);
+            }
+            return [...prev.filter(c => c.id !== savedItem.id && c.slug !== savedItem.slug), savedItem as BlogCategory];
+          });
+        }
+
         invalidateAllCatalogsCache();
-        triggerAlert(isEditing ? `Category '${formData.name}' updated successfully.` : `New category '${formData.name}' created!`);
+        triggerAlert(isEditing ? `Category '${trimmedName}' updated successfully.` : `New category '${trimmedName}' created!`);
         setIsModalOpen(false);
         onRefreshCatalogs?.();
       } else {
@@ -282,6 +333,13 @@ export default function CategoryManagementAdminModule({
       ? `/api/admin/categories/${item.id}/status` 
       : `/api/admin/blog-categories/${item.id}/status`;
 
+    // Immediate optimistic update
+    if (activeSubTab === 'services') {
+      setLocalCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: newStatus } : c));
+    } else {
+      setLocalBlogCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: newStatus } : c));
+    }
+
     try {
       const res = await adminFetch(endpoint, {
         method: 'PUT',
@@ -298,10 +356,21 @@ export default function CategoryManagementAdminModule({
           : `Category '${item.name}' deactivated successfully.`);
         onRefreshCatalogs?.();
       } else {
+        // Rollback on failure
+        if (activeSubTab === 'services') {
+          setLocalCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: item.status } : c));
+        } else {
+          setLocalBlogCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: item.status } : c));
+        }
         const err = await res.json().catch(() => ({}));
         alert(err.message || `Failed to ${newStatus === 'Active' ? 'activate' : 'deactivate'} category.`);
       }
     } catch (err: any) {
+      if (activeSubTab === 'services') {
+        setLocalCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: item.status } : c));
+      } else {
+        setLocalBlogCategories(prev => prev.map(c => c.id === item.id ? { ...c, status: item.status } : c));
+      }
       alert(err.message || 'Network error updating category status.');
     }
   };
@@ -319,10 +388,24 @@ export default function CategoryManagementAdminModule({
     const currentOrder = item.sortOrder || (currentIndex + 1);
     const targetOrder = targetItem.sortOrder || (targetIndex + 1);
 
+    // Optimistic swap
+    if (activeSubTab === 'services') {
+      setLocalCategories(prev => prev.map(c => {
+        if (c.id === item.id) return { ...c, sortOrder: targetOrder };
+        if (c.id === targetItem.id) return { ...c, sortOrder: currentOrder };
+        return c;
+      }));
+    } else {
+      setLocalBlogCategories(prev => prev.map(c => {
+        if (c.id === item.id) return { ...c, sortOrder: targetOrder };
+        if (c.id === targetItem.id) return { ...c, sortOrder: currentOrder };
+        return c;
+      }));
+    }
+
     const endpoint = activeSubTab === 'services' ? '/api/admin/categories' : '/api/admin/blog-categories';
 
     try {
-      // Swap sortOrders
       await Promise.all([
         adminFetch(`${endpoint}/${item.id}`, {
           method: 'PUT',
@@ -383,6 +466,11 @@ export default function CategoryManagementAdminModule({
 
       const resData = await res.json().catch(() => ({}));
       if (res.ok) {
+        if (deleteModal.type === 'services') {
+          setLocalCategories(prev => prev.filter(c => c.id !== cat.id));
+        } else {
+          setLocalBlogCategories(prev => prev.filter(c => c.id !== cat.id));
+        }
         invalidateAllCatalogsCache();
         triggerAlert(resData.message || `Category '${cat.name}' deleted successfully.`);
         setDeleteModal({ isOpen: false, category: null, type: 'services', fallbackId: '', linkedCount: 0 });

@@ -1384,14 +1384,14 @@ function getBaselineSeedState(): Record<string, any> {
     permissions: [] as any[],
     sessions: [] as any[],
     refreshTokens: [] as any[],
-    categories: [] as ServiceCategory[],
-    blogCategories: [] as BlogCategory[],
-    services: [] as Service[],
+    categories: [...PRESEEDED_CATEGORIES],
+    blogCategories: [...PRESEEDED_BLOG_CATEGORIES],
+    services: [...PRESEEDED_SERVICES],
     orders: [] as Order[],
     tickets: [] as SupportTicket[],
     coupons: [] as any[],
     reviews: [] as any[],
-    blogs: [] as any[],
+    blogs: [...PRESEEDED_BLOGS],
     notifications: [] as Notification[],
     faqs: [...PRESEEDED_FAQS],
     banners: [] as any[],
@@ -1428,14 +1428,14 @@ let dbState: Record<string, any> = {
   permissions: [] as any[],
   sessions: [] as any[],
   refreshTokens: [] as any[],
-  categories: [] as ServiceCategory[],
-  blogCategories: [] as BlogCategory[],
-  services: [] as Service[],
+  categories: [...PRESEEDED_CATEGORIES],
+  blogCategories: [...PRESEEDED_BLOG_CATEGORIES],
+  services: [...PRESEEDED_SERVICES],
   orders: [] as Order[],
   tickets: [] as SupportTicket[],
   coupons: [] as any[],
   reviews: [] as any[],
-  blogs: [] as any[],
+  blogs: [...PRESEEDED_BLOGS],
   notifications: [] as Notification[],
   faqs: [] as any[],
   banners: [] as any[],
@@ -2231,18 +2231,40 @@ function normalizeDatabaseRelationships() {
   }
 
   // 3. Normalize Service Categories
-  if (!Array.isArray(dbState.categories)) {
-    dbState.categories = [];
+  if (!Array.isArray(dbState.categories) || dbState.categories.length === 0) {
+    dbState.categories = [...PRESEEDED_CATEGORIES];
   }
-  // Ensure all categories have status, slug, and sortOrder
+  // Ensure all categories have valid id, status, slug, and sortOrder
+  const seenCatIds = new Set<string>();
+  dbState.categories = dbState.categories.filter((cat: any) => Boolean(cat && typeof cat === 'object'));
   dbState.categories.forEach((cat: any, idx: number) => {
+    const rawName = String(cat.name || cat.title || '').trim();
+    if (!cat.name && cat.title) cat.name = cat.title;
+    let validSlug = String(cat.slug || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!validSlug && rawName) {
+      validSlug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+    if (!validSlug) validSlug = `cat-${idx + 1}`;
+
+    let validId = String(cat.id || '').trim();
+    if (!validId) validId = validSlug;
+    if (seenCatIds.has(validId)) {
+      validId = `${validId}-${idx + 1}`;
+    }
+    seenCatIds.add(validId);
+
+    cat.id = validId;
+    cat.slug = validSlug;
     if (!cat.status) cat.status = 'Active';
-    if (!cat.slug) cat.slug = cat.id || (cat.name ? cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : `cat-${idx}`);
-    if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
+    if (cat.sortOrder === undefined || typeof cat.sortOrder !== 'number' || isNaN(cat.sortOrder)) cat.sortOrder = idx + 1;
     if (!cat.color) cat.color = 'blue';
+    if (!cat.icon) cat.icon = 'Folder';
   });
 
   // Ensure services have valid categoryId
+  if (!Array.isArray(dbState.services) || dbState.services.length === 0) {
+    dbState.services = [...PRESEEDED_SERVICES];
+  }
   if (Array.isArray(dbState.services)) {
     const validCatIds = new Set(dbState.categories.map((c: any) => c.id));
     const fallbackCatId = dbState.categories[0]?.id || 'gov';
@@ -2256,15 +2278,38 @@ function normalizeDatabaseRelationships() {
   }
 
   // 4. Normalize Blog Categories & Blog relationships
-  if (!Array.isArray(dbState.blogCategories)) {
-    dbState.blogCategories = [];
+  if (!Array.isArray(dbState.blogCategories) || dbState.blogCategories.length === 0) {
+    dbState.blogCategories = [...PRESEEDED_BLOG_CATEGORIES];
   }
+  const seenBlogCatIds = new Set<string>();
+  dbState.blogCategories = dbState.blogCategories.filter((cat: any) => Boolean(cat && typeof cat === 'object'));
   dbState.blogCategories.forEach((cat: any, idx: number) => {
+    const rawName = String(cat.name || cat.title || '').trim();
+    if (!cat.name && cat.title) cat.name = cat.title;
+    let validSlug = String(cat.slug || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!validSlug && rawName) {
+      validSlug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+    if (!validSlug) validSlug = `bcat-${idx + 1}`;
+
+    let validId = String(cat.id || '').trim();
+    if (!validId) validId = validSlug.startsWith('blog-cat-') ? validSlug : `blog-cat-${validSlug}`;
+    if (seenBlogCatIds.has(validId)) {
+      validId = `${validId}-${idx + 1}`;
+    }
+    seenBlogCatIds.add(validId);
+
+    cat.id = validId;
+    cat.slug = validSlug;
     if (!cat.status) cat.status = 'Active';
-    if (!cat.slug) cat.slug = cat.id || (cat.name ? cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : `bcat-${idx}`);
-    if (cat.sortOrder === undefined) cat.sortOrder = idx + 1;
+    if (cat.sortOrder === undefined || typeof cat.sortOrder !== 'number' || isNaN(cat.sortOrder)) cat.sortOrder = idx + 1;
     if (!cat.color) cat.color = 'blue';
+    if (!cat.icon) cat.icon = 'Bookmark';
   });
+
+  if (!Array.isArray(dbState.blogs) || dbState.blogs.length === 0) {
+    dbState.blogs = [...PRESEEDED_BLOGS];
+  }
 
   if (Array.isArray(dbState.blogs)) {
     const fallbackBlogCat = dbState.blogCategories[0] || { id: 'blog-cat-gov', name: 'Government Schemes' };
@@ -3885,10 +3930,10 @@ app.get('/api/admin/orders/assigned', requirePermission(['orders.view_assigned',
 });
 
 // Categories & Services
-app.get('/api/categories', (req, res) => {
-  const { all } = req.query;
+const handleGetCategories = (req: express.Request, res: express.Response) => {
+  const { all, includeAll } = req.query;
   let cats = dbState.categories || [];
-  if (all !== 'true') {
+  if (all !== 'true' && includeAll !== 'true') {
     cats = cats.filter(c => (c.status || 'Active') === 'Active');
   }
   const mapped = cats.map(c => ({
@@ -3896,12 +3941,15 @@ app.get('/api/categories', (req, res) => {
     serviceCount: (dbState.services || []).filter(s => s.categoryId === c.id).length
   }));
   res.json(mapped);
-});
+};
+
+app.get('/api/categories', handleGetCategories);
+app.get('/api/service-categories', handleGetCategories);
 
 app.get('/api/blog-categories', (req, res) => {
-  const { all } = req.query;
+  const { all, includeAll } = req.query;
   let cats = dbState.blogCategories || [];
-  if (all !== 'true') {
+  if (all !== 'true' && includeAll !== 'true') {
     cats = cats.filter(c => (c.status || 'Active') === 'Active');
   }
   const mapped = cats.map(c => ({
@@ -7116,23 +7164,43 @@ app.get('/api/admin/categories', authenticateToken, (req, res) => {
   res.json(mapped);
 });
 
-app.post('/api/admin/categories', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
-  const { updaterId, updaterName, updaterRole } = req.body;
-  const category = req.body.category || req.body;
-  const catName = (category?.name || category?.title || '').trim();
+// Admin Service Category Creation Handler
+const handleCreateServiceCategory = async (req: express.Request, res: express.Response) => {
+  const { updaterId, updaterName, updaterRole } = req.body || {};
+  const category = req.body?.category || req.body || {};
+  const catName = String(category?.name || category?.title || '').trim();
   if (!catName) {
-    return res.status(400).json({ message: 'Category name is required' });
+    return res.status(400).json({ success: false, message: 'Category name is required' });
   }
-  const id = (category.id || catName.toLowerCase().replace(/[^a-z0-9]/g, '-')).replace(/^-+|-+$/g, '');
-  
-  if (dbState.categories.some(c => c.id === id)) {
-    return res.status(400).json({ message: `Category with ID or slug '${id}' already exists.` });
+
+  // Derive slug and id safely
+  let slug = String(category.slug || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) {
+    slug = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  if (!slug) {
+    slug = `cat-${Date.now().toString().slice(-6)}`;
+  }
+
+  let id = String(category.id || '').trim();
+  if (!id) {
+    id = slug;
+  }
+
+  // Check collision
+  if (dbState.categories.some((c: any) => c.id === id || (c.slug && c.slug === slug))) {
+    if (!category.id) {
+      id = `${id}-${Date.now().toString().slice(-4)}`;
+      slug = id;
+    } else {
+      return res.status(400).json({ success: false, message: `Category with ID '${id}' already exists.` });
+    }
   }
 
   const newCat: ServiceCategory = {
     id,
     name: catName,
-    slug: category.slug || id,
+    slug,
     icon: category.icon || 'Folder',
     color: category.color || 'blue',
     description: category.description || '',
@@ -7145,13 +7213,16 @@ app.post('/api/admin/categories', authenticateToken, requireRole(['SUPER_ADMIN',
   logSystemAction(updaterId || (req as any).user?.id || 'admin-1', updaterName || (req as any).user?.name || 'Administrator', updaterRole || (req as any).user?.role || 'ADMIN', 'CATEGORY_CREATE', `Created service category ${newCat.name}`);
   await persistDatabase('categories', newCat.id);
   res.status(201).json(newCat);
-});
+};
+
+app.post('/api/admin/categories', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleCreateServiceCategory);
+app.post('/api/admin/service-categories', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleCreateServiceCategory);
 
 // Category Status Toggle / Update Handler
 const handleCategoryStatusUpdate = async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
-  const { updaterId, updaterName, updaterRole } = req.body;
-  const requestedStatus = req.body.status || req.body.category?.status;
+  const { updaterId, updaterName, updaterRole } = req.body || {};
+  const requestedStatus = req.body?.status || req.body?.category?.status;
 
   if (!requestedStatus || !['Active', 'Inactive'].includes(requestedStatus)) {
     return res.status(400).json({ 
@@ -7160,7 +7231,7 @@ const handleCategoryStatusUpdate = async (req: express.Request, res: express.Res
     });
   }
 
-  const idx = dbState.categories.findIndex(c => c.id === id);
+  const idx = dbState.categories.findIndex((c: any) => c.id === id || c.slug === id);
   if (idx === -1) {
     return res.status(404).json({ success: false, message: 'Category not found.' });
   }
@@ -7193,12 +7264,12 @@ app.patch('/api/admin/categories/:id/status', authenticateToken, requireRole(['S
 app.put('/api/admin/service-categories/:id/status', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleCategoryStatusUpdate);
 app.patch('/api/admin/service-categories/:id/status', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleCategoryStatusUpdate);
 
-app.put('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
-  const { updaterId, updaterName, updaterRole } = req.body;
-  const category = req.body.category || req.body;
-  const idx = dbState.categories.findIndex(c => c.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'Category not found' });
-  const updatedName = (category.name || category.title || dbState.categories[idx].name).trim();
+const handleUpdateServiceCategory = async (req: express.Request, res: express.Response) => {
+  const { updaterId, updaterName, updaterRole } = req.body || {};
+  const category = req.body?.category || req.body || {};
+  const idx = dbState.categories.findIndex((c: any) => c.id === req.params.id || c.slug === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, message: 'Category not found' });
+  const updatedName = String(category.name || category.title || dbState.categories[idx].name).trim();
   
   const existingStatus = dbState.categories[idx].status || 'Active';
   const newStatus = category.status !== undefined 
@@ -7208,6 +7279,7 @@ app.put('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMI
   dbState.categories[idx] = { 
     ...dbState.categories[idx], 
     ...category, 
+    id: dbState.categories[idx].id,
     name: updatedName,
     sortOrder: category.sortOrder !== undefined ? Number(category.sortOrder) : dbState.categories[idx].sortOrder,
     status: newStatus,
@@ -7216,65 +7288,88 @@ app.put('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMI
   logSystemAction(updaterId || (req as any).user?.id || 'admin-1', updaterName || (req as any).user?.name || 'Administrator', updaterRole || (req as any).user?.role || 'ADMIN', 'CATEGORY_UPDATE', `Updated service category ${dbState.categories[idx].name}`);
   await persistDatabase('categories', dbState.categories[idx].id);
   res.json(dbState.categories[idx]);
-});
+};
 
-app.delete('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
+app.put('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleUpdateServiceCategory);
+app.put('/api/admin/service-categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleUpdateServiceCategory);
+
+const handleDeleteServiceCategory = async (req: express.Request, res: express.Response) => {
   const { updaterId, updaterName, updaterRole, fallbackCategoryId } = req.body || {};
-  const cat = dbState.categories.find(c => c.id === req.params.id);
-  if (!cat) return res.status(404).json({ message: 'Category not found' });
+  const cat = dbState.categories.find((c: any) => c.id === req.params.id || c.slug === req.params.id);
+  if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
   
   if (dbState.categories.length <= 1) {
-    return res.status(400).json({ message: 'Cannot delete the last remaining service category.' });
+    return res.status(400).json({ success: false, message: 'Cannot delete the last remaining service category.' });
   }
 
   // Reassign any services linked to this category
-  const remainingCat = dbState.categories.find(c => c.id !== req.params.id);
+  const remainingCat = dbState.categories.find((c: any) => c.id !== cat.id);
   const targetCatId = fallbackCategoryId || (remainingCat ? remainingCat.id : 'gov');
   let reassignedCount = 0;
-  (dbState.services || []).forEach(s => {
-    if (s.categoryId === req.params.id) {
+  (dbState.services || []).forEach((s: any) => {
+    if (s.categoryId === cat.id || s.categoryId === cat.slug) {
       s.categoryId = targetCatId;
       reassignedCount++;
     }
   });
 
-  dbState.categories = dbState.categories.filter(c => c.id !== req.params.id);
+  dbState.categories = dbState.categories.filter((c: any) => c.id !== cat.id);
   logSystemAction(updaterId || (req as any).user?.id || 'admin-1', updaterName || (req as any).user?.name || 'Administrator', updaterRole || (req as any).user?.role || 'ADMIN', 'CATEGORY_DELETE', `Deleted service category ${cat.name} (Reassigned ${reassignedCount} services to ${targetCatId})`);
-  await persistDatabase('categories', req.params.id);
+  await persistDatabase('categories', cat.id);
   if (reassignedCount > 0) {
     await persistDatabase('services');
   }
-  res.json({ message: `Service category '${cat.name}' deleted successfully. ${reassignedCount} linked services reassigned.`, remainingCategories: dbState.categories });
-});
+  res.json({ success: true, message: `Service category '${cat.name}' deleted successfully. ${reassignedCount} linked services reassigned.`, remainingCategories: dbState.categories });
+};
+
+app.delete('/api/admin/categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleDeleteServiceCategory);
+app.delete('/api/admin/service-categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), handleDeleteServiceCategory);
 
 // Blog Category Management CRUD
 app.get('/api/admin/blog-categories', authenticateToken, (req, res) => {
   const cats = dbState.blogCategories || [];
-  const mapped = cats.map(c => ({
+  const mapped = cats.map((c: any) => ({
     ...c,
     status: c.status || 'Active',
-    blogCount: (dbState.blogs || []).filter(b => b.categoryId === c.id || b.category === c.name).length
+    blogCount: (dbState.blogs || []).filter((b: any) => b.categoryId === c.id || b.category === c.name).length
   }));
   res.json(mapped);
 });
 
 app.post('/api/admin/blog-categories', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
-  const category = req.body.category || req.body;
-  const catName = (category?.name || category?.title || '').trim();
+  const category = req.body?.category || req.body || {};
+  const catName = String(category?.name || category?.title || '').trim();
   if (!catName) {
-    return res.status(400).json({ message: 'Blog category name is required' });
+    return res.status(400).json({ success: false, message: 'Blog category name is required' });
   }
-  const id = (category.id || `blog-cat-${catName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`).replace(/^-+|-+$/g, '');
+
+  let slug = String(category.slug || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) {
+    slug = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  if (!slug) {
+    slug = `bcat-${Date.now().toString().slice(-6)}`;
+  }
+
+  let id = String(category.id || '').trim();
+  if (!id) {
+    id = slug.startsWith('blog-cat-') ? slug : `blog-cat-${slug}`;
+  }
   
-  if (dbState.blogCategories.some(c => c.id === id)) {
-    return res.status(400).json({ message: `Blog category with ID or slug '${id}' already exists.` });
+  if (dbState.blogCategories.some((c: any) => c.id === id || (c.slug && c.slug === slug))) {
+    if (!category.id) {
+      id = `${id}-${Date.now().toString().slice(-4)}`;
+      slug = `${slug}-${Date.now().toString().slice(-4)}`;
+    } else {
+      return res.status(400).json({ success: false, message: `Blog category with ID '${id}' already exists.` });
+    }
   }
 
   const newCat: BlogCategory = {
     id,
     name: catName,
-    slug: category.slug || id.replace('blog-cat-', ''),
+    slug,
     icon: category.icon || 'Bookmark',
     color: category.color || 'blue',
     description: category.description || '',
@@ -7293,7 +7388,7 @@ app.post('/api/admin/blog-categories', authenticateToken, requireRole(['SUPER_AD
 const handleBlogCategoryStatusUpdate = async (req: express.Request, res: express.Response) => {
   const { id } = req.params;
   const { updaterId, updaterName, updaterRole } = req.body || {};
-  const requestedStatus = req.body.status || req.body.category?.status;
+  const requestedStatus = req.body?.status || req.body?.category?.status;
 
   if (!requestedStatus || !['Active', 'Inactive'].includes(requestedStatus)) {
     return res.status(400).json({ 
@@ -7302,7 +7397,7 @@ const handleBlogCategoryStatusUpdate = async (req: express.Request, res: express
     });
   }
 
-  const idx = dbState.blogCategories.findIndex(c => c.id === id);
+  const idx = dbState.blogCategories.findIndex((c: any) => c.id === id || c.slug === id);
   if (idx === -1) {
     return res.status(404).json({ success: false, message: 'Blog category not found.' });
   }
@@ -7335,10 +7430,10 @@ app.patch('/api/admin/blog-categories/:id/status', authenticateToken, requireRol
 
 app.put('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
-  const category = req.body.category || req.body;
-  const idx = dbState.blogCategories.findIndex(c => c.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'Blog category not found' });
-  const updatedName = (category.name || category.title || dbState.blogCategories[idx].name).trim();
+  const category = req.body?.category || req.body || {};
+  const idx = dbState.blogCategories.findIndex((c: any) => c.id === req.params.id || c.slug === req.params.id);
+  if (idx === -1) return res.status(404).json({ success: false, message: 'Blog category not found' });
+  const updatedName = String(category.name || category.title || dbState.blogCategories[idx].name).trim();
   
   const existingStatus = dbState.blogCategories[idx].status || 'Active';
   const newStatus = category.status !== undefined 
@@ -7348,6 +7443,7 @@ app.put('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SUPER
   dbState.blogCategories[idx] = { 
     ...dbState.blogCategories[idx], 
     ...category, 
+    id: dbState.blogCategories[idx].id,
     name: updatedName,
     sortOrder: category.sortOrder !== undefined ? Number(category.sortOrder) : dbState.blogCategories[idx].sortOrder,
     status: newStatus,
@@ -7356,8 +7452,8 @@ app.put('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SUPER
   
   // Sync blog posts if category name changed
   if (category.name && category.name !== dbState.blogCategories[idx].name) {
-    (dbState.blogs || []).forEach(b => {
-      if (b.categoryId === req.params.id) {
+    (dbState.blogs || []).forEach((b: any) => {
+      if (b.categoryId === dbState.blogCategories[idx].id || b.category === dbState.blogCategories[idx].name) {
         b.category = updatedName;
       }
     });
@@ -7371,34 +7467,34 @@ app.put('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SUPER
 
 app.delete('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   const { updaterId, updaterName, updaterRole, fallbackCategoryId } = req.body || {};
-  const cat = dbState.blogCategories.find(c => c.id === req.params.id);
-  if (!cat) return res.status(404).json({ message: 'Blog category not found' });
+  const cat = dbState.blogCategories.find((c: any) => c.id === req.params.id || c.slug === req.params.id);
+  if (!cat) return res.status(404).json({ success: false, message: 'Blog category not found' });
   
   if (dbState.blogCategories.length <= 1) {
-    return res.status(400).json({ message: 'Cannot delete the last remaining blog category.' });
+    return res.status(400).json({ success: false, message: 'Cannot delete the last remaining blog category.' });
   }
 
   // Reassign any blogs linked to this category
-  const remainingCat = dbState.blogCategories.find(c => c.id !== req.params.id);
+  const remainingCat = dbState.blogCategories.find((c: any) => c.id !== cat.id);
   const targetCatId = fallbackCategoryId || (remainingCat ? remainingCat.id : 'blog-cat-gov');
-  const targetCatName = (dbState.blogCategories.find(c => c.id === targetCatId) || remainingCat)?.name || 'General';
+  const targetCatName = (dbState.blogCategories.find((c: any) => c.id === targetCatId) || remainingCat)?.name || 'General';
   
   let reassignedCount = 0;
-  (dbState.blogs || []).forEach(b => {
-    if (b.categoryId === req.params.id || b.category === cat.name) {
+  (dbState.blogs || []).forEach((b: any) => {
+    if (b.categoryId === cat.id || b.category === cat.name) {
       b.categoryId = targetCatId;
       b.category = targetCatName;
       reassignedCount++;
     }
   });
 
-  dbState.blogCategories = dbState.blogCategories.filter(c => c.id !== req.params.id);
+  dbState.blogCategories = dbState.blogCategories.filter((c: any) => c.id !== cat.id);
   logSystemAction(updaterId || (req as any).user?.id || 'admin-1', updaterName || (req as any).user?.name || 'Administrator', updaterRole || (req as any).user?.role || 'ADMIN', 'BLOG_CATEGORY_DELETE', `Deleted blog category ${cat.name} (Reassigned ${reassignedCount} blogs to ${targetCatName})`);
-  await persistDatabase('blogCategories', req.params.id);
+  await persistDatabase('blogCategories', cat.id);
   if (reassignedCount > 0) {
     await persistDatabase('blogs');
   }
-  res.json({ message: `Blog category '${cat.name}' deleted successfully. ${reassignedCount} linked articles reassigned.`, remainingBlogCategories: dbState.blogCategories });
+  res.json({ success: true, message: `Blog category '${cat.name}' deleted successfully. ${reassignedCount} linked articles reassigned.`, remainingBlogCategories: dbState.blogCategories });
 });
 
 // Service Management CRUD

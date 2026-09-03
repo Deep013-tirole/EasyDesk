@@ -439,18 +439,38 @@ export default function AdminDashboard({ onRefreshCatalogs }: AdminDashboardProp
           .catch(() => {})
       );
 
-      // Categories (with automatic localStorage cache fallback - include all for admin)
+      // Categories (Fetch live from admin endpoint with cache fallback)
       fetchTasks.push(
-        fetchCategoriesWithCache([], true)
-          .then(res => { if (res.data) setCategories(res.data); })
-          .catch(() => {})
+        adminFetch('/api/admin/categories')
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              setCategories(data);
+              setCachedCatalog(CATALOG_CACHE_KEYS.CATEGORIES_ALL, data);
+            } else {
+              fetchCategoriesWithCache([], true).then(res => { if (res.data) setCategories(res.data); });
+            }
+          })
+          .catch(() => {
+            fetchCategoriesWithCache([], true).then(res => { if (res.data) setCategories(res.data); });
+          })
       );
 
-      // Blog Categories (with automatic localStorage cache fallback - include all for admin)
+      // Blog Categories (Fetch live from admin endpoint with cache fallback)
       fetchTasks.push(
-        fetchBlogCategoriesWithCache([], true)
-          .then(res => { if (res.data) setBlogCategories(res.data); })
-          .catch(() => {})
+        adminFetch('/api/admin/blog-categories')
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              setBlogCategories(data);
+              setCachedCatalog(CATALOG_CACHE_KEYS.BLOG_CATEGORIES_ALL, data);
+            } else {
+              fetchBlogCategoriesWithCache([], true).then(res => { if (res.data) setBlogCategories(res.data); });
+            }
+          })
+          .catch(() => {
+            fetchBlogCategoriesWithCache([], true).then(res => { if (res.data) setBlogCategories(res.data); });
+          })
       );
 
       // Blogs (with automatic localStorage cache fallback)
