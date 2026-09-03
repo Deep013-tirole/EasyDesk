@@ -21,6 +21,7 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
 process.env.IS_WORKER = 'true';
 
 import { setCloudflareEnv } from './lib/d1Storage.js';
+import defaultFirebaseConfig from '../firebase-applet-config.json';
 import { app, ensureDatabaseReady } from '../server.js';
 
 /**
@@ -207,6 +208,36 @@ export default {
         }
       } catch (r2Err) {
         console.warn('[WORKER] Direct R2 get error, falling back to express handler:', r2Err);
+      }
+    }
+
+    // Direct edge Firebase Storage bucket streaming for permanent binary files
+    if (url.pathname.startsWith('/uploads/')) {
+      const cleanKey = url.pathname.replace(/^\/uploads\//, '');
+      const fbBucket = env?.FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || (defaultFirebaseConfig as any)?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app';
+      const apiKey = env?.FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || (defaultFirebaseConfig as any)?.apiKey || '';
+      const keyQuery = apiKey ? `&key=${apiKey}` : '';
+      const fbUrl = `https://firebasestorage.googleapis.com/v0/b/${fbBucket}/o/${encodeURIComponent(cleanKey)}?alt=media${keyQuery}`;
+      
+      try {
+        const fbRes = await fetch(fbUrl, {
+          cf: {
+            cacheTtl: 31536000,
+            cacheEverything: true
+          }
+        } as any);
+
+        if (fbRes.ok && fbRes.body) {
+          const contentType = fbRes.headers.get('content-type') || 'application/octet-stream';
+          const headers = new Headers();
+          headers.set('Content-Type', contentType);
+          headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+          const etag = fbRes.headers.get('etag');
+          if (etag) headers.set('ETag', etag);
+          return new Response(fbRes.body, { status: 200, headers });
+        }
+      } catch (fbErr) {
+        console.warn('[WORKER] Edge Firebase Storage lookup notice:', fbErr);
       }
     }
 

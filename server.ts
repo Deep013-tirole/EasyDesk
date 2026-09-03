@@ -25,12 +25,13 @@ if (bcrypt && typeof bcrypt.setRandomFallback === 'function') {
   });
 }
 
-// Firebase Storage Bucket configuration (Strictly used for media & binary uploads only)
-const FIREBASE_STORAGE_BUCKET = (defaultFirebaseConfig as any)?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app';
+// Firebase Storage Bucket configuration (Strictly used for media & permanent binary uploads at the edge)
+const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || (defaultFirebaseConfig as any)?.storageBucket || 'khaki-fact-snzsc.firebasestorage.app';
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || (defaultFirebaseConfig as any)?.apiKey || '';
 
 /**
- * Uploads binary media directly to Firebase Storage.
- * Firebase Storage is used exclusively for binary media files.
+ * Uploads binary media directly to Firebase Storage bucket.
+ * Firebase Storage is used for permanent binary file storage at the edge.
  * Structured metadata is persisted to Cloudflare D1.
  */
 export async function uploadToFirebaseStorage(
@@ -41,13 +42,14 @@ export async function uploadToFirebaseStorage(
 ): Promise<{ downloadUrl: string; storagePath: string; sizeBytes: number; fileId: string }> {
   const cleanPath = storagePath.replace(/^\/+/, '');
   const encodedPath = encodeURIComponent(cleanPath);
-  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodedPath}`;
+  const keyParam = FIREBASE_API_KEY ? `&key=${FIREBASE_API_KEY}` : '';
+  const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodedPath}${keyParam}`;
   
   const token = (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') 
     ? (crypto as any).randomUUID() 
     : `tok_${Date.now()}_${Math.random().toString(36).substring(2)}`;
   
-  const defaultDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${token}`;
+  const defaultDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${token}${keyParam}`;
 
   try {
     const res = await fetch(uploadUrl, {
@@ -62,7 +64,7 @@ export async function uploadToFirebaseStorage(
     if (res.ok) {
       const data = (await res.json()) as any;
       const downloadToken = data.downloadTokens || data.metadata?.token || token;
-      const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+      const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${downloadToken}${keyParam}`;
       return { 
         downloadUrl, 
         storagePath: cleanPath, 
@@ -75,7 +77,7 @@ export async function uploadToFirebaseStorage(
   }
 
   return {
-    downloadUrl: defaultDownloadUrl,
+    downloadUrl: `/uploads/${cleanPath}`,
     storagePath: cleanPath,
     sizeBytes: buffer.length,
     fileId: `fb-${Date.now()}-${Math.floor(Math.random() * 1000)}`
@@ -229,6 +231,27 @@ app.get(['/uploads/:folder/:filename', '/uploads/:filename'], async (req, res) =
       return res.send(r2Obj.body);
     }
   } catch (r2Err) {
+    // Proceed to Firebase Storage or disk
+  }
+
+  // 1b. Check Firebase Storage Bucket (Permanent edge binary file storage)
+  try {
+    const fbCleanKey = `${folder}/${filename}`.replace(/^\/+/, '');
+    const keyQuery = FIREBASE_API_KEY ? `&key=${FIREBASE_API_KEY}` : '';
+    const fbUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(fbCleanKey)}?alt=media${keyQuery}`;
+    const fbRes = await fetch(fbUrl);
+    if (fbRes.ok) {
+      const fbContentType = fbRes.headers.get('content-type') || 'application/octet-stream';
+      const fbBuffer = Buffer.from(await fbRes.arrayBuffer());
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, fbBuffer);
+      } catch (diskErr) {}
+      res.setHeader('Content-Type', fbContentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(fbBuffer);
+    }
+  } catch (fbErr) {
     // Proceed to disk or reconstruction
   }
 
@@ -3107,6 +3130,116 @@ app.post('/api/auth/firebase-verify', async (req, res) => {
   });
 });
 
+// Customer Direct Registration Endpoint
+app.post(['/api/auth/register', '/api/auth/customer/register', '/api/auth/signup'], async (req, res) => {
+  const { name, email, mobile, password, city, state, country } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  if (!dbState.customers) dbState.customers = [];
+  const existing = dbState.customers.find((c: any) => c.email && c.email.toLowerCase() === normalizedEmail);
+  if (existing) {
+    return res.status(400).json({ message: 'An account with this email already exists.' });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const customer = {
+    id: `customer-${Date.now()}`,
+    name: name || normalizedEmail.split('@')[0],
+    email: normalizedEmail,
+    mobile: mobile || '',
+    role: UserRole.USER,
+    country: country || 'India',
+    state: state || 'Maharashtra',
+    city: city || 'Mumbai',
+    profilePhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    password: hashedPassword,
+    isVerified: true,
+    createdAt: new Date().toISOString()
+  };
+
+  dbState.customers.push(customer);
+  if (!dbState.users) dbState.users = [];
+  dbState.users.push({
+    id: customer.id,
+    name: customer.name,
+    email: customer.email,
+    mobile: customer.mobile,
+    role: UserRole.USER,
+    createdAt: customer.createdAt
+  });
+
+  addAuditLog(customer.id, customer.name, 'USER', 'CUSTOMER_REGISTER', 'Customer registered account.');
+  await persistDatabase('customers', customer.id);
+
+  const jwtSecret = dbState.settings?.jwtSecret || 'easydesk_super_secret_jwt_key_2026';
+  const accessToken = jwt.sign(
+    { id: customer.id, email: customer.email, role: customer.role, name: customer.name },
+    jwtSecret,
+    { expiresIn: '1h' }
+  );
+  const refreshToken = jwt.sign({ id: customer.id }, jwtSecret, { expiresIn: '7d' });
+  dbState.refreshTokens.push({ token: refreshToken, userId: customer.id, createdAt: new Date().toISOString() });
+
+  const { password: __, ...safeCust } = customer;
+  return res.status(201).json({
+    accessToken,
+    refreshToken,
+    user: safeCust,
+    customer: safeCust,
+    id: customer.id
+  });
+});
+
+// Customer Direct Login Endpoint
+app.post(['/api/auth/login', '/api/auth/customer/login'], async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const customer = (dbState.customers || []).find((c: any) => c.email && c.email.toLowerCase() === normalizedEmail);
+  if (!customer) {
+    return res.status(401).json({ message: 'Invalid email or password.' });
+  }
+
+  if (customer.isSuspended) {
+    return res.status(403).json({ message: 'Your account is suspended.' });
+  }
+
+  let isValid = false;
+  if (customer.password && (customer.password.startsWith('$2a$') || customer.password.startsWith('$2b$'))) {
+    isValid = await bcrypt.compare(password, customer.password);
+  } else if (customer.password === password) {
+    isValid = true;
+  } else {
+    isValid = await bcrypt.compare(password, DEFAULT_PASSWORD_HASH);
+  }
+
+  if (!isValid) {
+    return res.status(401).json({ message: 'Invalid email or password.' });
+  }
+
+  const jwtSecret = dbState.settings?.jwtSecret || 'easydesk_super_secret_jwt_key_2026';
+  const accessToken = jwt.sign(
+    { id: customer.id, email: customer.email, role: customer.role, name: customer.name },
+    jwtSecret,
+    { expiresIn: '1h' }
+  );
+  const refreshToken = jwt.sign({ id: customer.id }, jwtSecret, { expiresIn: '7d' });
+  dbState.refreshTokens.push({ token: refreshToken, userId: customer.id, createdAt: new Date().toISOString() });
+
+  const { password: __, ...safeCust } = customer;
+  return res.json({
+    accessToken,
+    refreshToken,
+    user: safeCust
+  });
+});
+
 // =========================================================
 // ADMIN & TEAM AUTHENTICATION ENDPOINTS
 // =========================================================
@@ -3905,6 +4038,7 @@ app.post('/api/orders', async (req, res) => {
     paymentScreenshot: paymentScreenshot || undefined,
     paymentDate: paymentDate || new Date().toISOString(),
     orderStatus: OrderStatus.PENDING,
+    status: OrderStatus.PENDING,
     totalAmount: finalAmount,
     createdAt: new Date().toISOString(),
     logs: [
@@ -4014,6 +4148,7 @@ app.patch('/api/orders/:id/status', async (req, res) => {
 
   if (status) {
     order.orderStatus = status as OrderStatus;
+    (order as any).status = status;
     order.logs.push({
       status: status as OrderStatus,
       comment: comment || `Order state changed to ${status}.`,
@@ -4455,7 +4590,28 @@ app.post('/api/orders/:id/submit-payment', async (req, res) => {
   order.paymentMethod = selectedPaymentMethod;
   order.paymentStatus = PaymentStatus.PENDING_VERIFICATION;
   order.utr = utr;
-  order.paymentScreenshot = paymentScreenshot || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400';
+
+  let finalScreenshot = paymentScreenshot || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400';
+  if (paymentScreenshot && paymentScreenshot.startsWith('data:')) {
+    try {
+      const buffer = Buffer.from(paymentScreenshot.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      const detectedMime = paymentScreenshot.match(/^data:([^;]+);/)?.[1] || 'image/jpeg';
+      const ext = detectedMime.includes('png') ? 'png' : 'jpg';
+      const storedFileName = `payment_${order.id}_${Date.now()}.${ext}`;
+      const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, buffer);
+      } catch (fsErr) {}
+      const fbUpload = await uploadToFirebaseStorage(`payments/${storedFileName}`, buffer, detectedMime);
+      await putR2File(`payments/${storedFileName}`, buffer, detectedMime);
+      finalScreenshot = fbUpload.downloadUrl || `/uploads/media/${storedFileName}`;
+    } catch (e) {
+      console.warn('[FirebaseStorage] Payment proof upload notice:', e);
+    }
+  }
+
+  order.paymentScreenshot = finalScreenshot;
   order.paymentDate = paymentDate || new Date().toISOString();
   order.rejectionReason = undefined;
 
@@ -5163,21 +5319,24 @@ app.post('/api/admin/settings', async (req, res) => {
 
 // Public About Us page API (Returns company content & founder, NO individual team members)
 app.get('/api/about', (req, res) => {
+  const aboutUs = dbState.aboutUs || PRESEEDED_ABOUT_US;
+  const founder = dbState.founder || PRESEEDED_FOUNDER;
   res.json({
-    aboutUs: dbState.aboutUs || PRESEEDED_ABOUT_US,
-    founder: dbState.founder || PRESEEDED_FOUNDER
+    ...aboutUs,
+    aboutUs,
+    founder
   });
 });
 
 const handleAboutUpdate = async (req: express.Request, res: express.Response) => {
-  const { aboutUs, updaterId, updaterName, updaterRole } = req.body || {};
-  const rawAbout = aboutUs || req.body;
+  const { aboutUs, about, updaterId, updaterName, updaterRole } = req.body || {};
+  const rawAbout = aboutUs || about || req.body;
   if (rawAbout && typeof rawAbout === 'object') {
     dbState.aboutUs = { ...(dbState.aboutUs || PRESEEDED_ABOUT_US), ...rawAbout };
     logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'ABOUT_US_UPDATE', 'Updated About Us CMS content.');
     await persistDatabase('aboutUs');
   }
-  res.json({ message: 'About Us content saved successfully.', aboutUs: dbState.aboutUs });
+  res.json({ message: 'About Us content saved successfully.', aboutUs: dbState.aboutUs, ...dbState.aboutUs });
 };
 app.post('/api/admin/about', handleAboutUpdate);
 app.post('/api/about', handleAboutUpdate);
@@ -5202,8 +5361,12 @@ const handleFounderUpdate = async (req: express.Request, res: express.Response) 
         const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
         const base64 = updatedFounder.photoUrl.replace(/^data:[^;]+;base64,/, '');
         const buffer = Buffer.from(base64, 'base64');
-        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-        fs.writeFileSync(targetPath, buffer);
+        try {
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+          fs.writeFileSync(targetPath, buffer);
+        } catch (fsErr) {}
+        await uploadToFirebaseStorage(`media/${storedFileName}`, buffer, 'image/jpeg');
+        await putR2File(`media/${storedFileName}`, buffer, 'image/jpeg');
         updatedFounder.photoData = updatedFounder.photoUrl;
         updatedFounder.photoUrl = `/uploads/media/${storedFileName}`;
       } catch (e) {
@@ -5224,8 +5387,12 @@ const handleFounderUpdate = async (req: express.Request, res: express.Response) 
         const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
         const base64 = updatedFounder.signatureUrl.replace(/^data:[^;]+;base64,/, '');
         const buffer = Buffer.from(base64, 'base64');
-        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-        fs.writeFileSync(targetPath, buffer);
+        try {
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+          fs.writeFileSync(targetPath, buffer);
+        } catch (fsErr) {}
+        await uploadToFirebaseStorage(`media/${storedFileName}`, buffer, 'image/png');
+        await putR2File(`media/${storedFileName}`, buffer, 'image/png');
         updatedFounder.signatureData = updatedFounder.signatureUrl;
         updatedFounder.signatureUrl = `/uploads/media/${storedFileName}`;
       } catch (e) {
@@ -5328,7 +5495,7 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
     const fbUpload = await uploadToFirebaseStorage(`employees/${uniqueFilename}`, buffer, mimeType);
     await putR2File(`employees/${uniqueFilename}`, buffer, mimeType);
 
-    const photoUrl = fbUpload.downloadUrl || `/uploads/employees/${uniqueFilename}`;
+    const photoUrl = `/uploads/employees/${uniqueFilename}`;
 
     // Also register in central media store for seamless retrieval and persistence
     const mediaId = `med-emp-${Date.now()}`;
@@ -5344,7 +5511,8 @@ app.post(['/api/admin/employees/upload-photo', '/api/admin/team/upload-photo'], 
       size: `${(buffer.length / 1024).toFixed(1)} KB`,
       sizeBytes: buffer.length,
       url: photoUrl,
-      downloadUrl: fbUpload.downloadUrl,
+      downloadUrl: fbUpload.downloadUrl || photoUrl,
+      fileData: buffer.length <= 850 * 1024 ? image : undefined,
       accessLevel: 'public' as const,
       folder: 'employees',
       title: `Employee Profile Photo - ${uniqueFilename}`,
@@ -7237,20 +7405,33 @@ app.delete('/api/admin/blog-categories/:id', authenticateToken, requireRole(['SU
 app.post('/api/admin/services', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const service = req.body.service || req.body;
-  if (!service || !service.title || !service.categoryId) {
+  const title = service.title || service.name;
+  if (!service || !title) {
     return res.status(400).json({ message: 'Service title and Category ID are required' });
   }
-  let baseId = service.id || service.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+  let categoryId = service.categoryId;
+  if (!categoryId && service.category) {
+    const found = (dbState.categories || []).find(c => c.id === service.category || c.name.toLowerCase() === service.category.toLowerCase());
+    categoryId = found ? found.id : service.category;
+  }
+  if (!categoryId) categoryId = 'cat-gst';
+
+  let baseId = service.id || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
   if (!baseId) baseId = `svc-${Date.now()}`;
   let id = baseId;
-  if (dbState.services.some(s => s.id === id)) {
+  if (!service.id && dbState.services.some(s => s.id === id)) {
     id = `${baseId}-${Date.now().toString().slice(-4)}`;
   }
+
+  const existingIdx = dbState.services.findIndex(s => s.id === id);
   const newSvc = {
     id,
-    categoryId: service.categoryId,
+    categoryId,
     subCategory: service.subCategory || '',
-    title: service.title,
+    title,
+    name: title,
+    price: Number(service.price ?? service.serviceCharge ?? 0),
     description: service.description || '',
     shortDescription: service.shortDescription || service.description?.slice(0, 160) || '',
     fullDescription: service.fullDescription || service.description || '',
@@ -7259,26 +7440,32 @@ app.post('/api/admin/services', authenticateToken, requireRole(['SUPER_ADMIN', '
     imageUrl: service.imageUrl || service.bannerImage || service.image || 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400',
     image: service.image || service.bannerImage || service.imageUrl || 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400',
     gallery: service.gallery || [],
-    govFees: Number(service.govFees) || 0,
-    serviceCharge: Number(service.serviceCharge) || 0,
-    estimatedTime: service.estimatedTime || service.processingTime || '3-5 Working Days',
-    processingTime: service.estimatedTime || service.processingTime || '3-5 Working Days',
+    govFees: Number(service.govFees ?? service.governmentFee ?? 0),
+    serviceCharge: Number(service.serviceCharge ?? service.price ?? 0),
+    estimatedTime: service.estimatedTime || service.processingTime || service.processingDays || '3-5 Working Days',
+    processingTime: service.estimatedTime || service.processingTime || service.processingDays || '3-5 Working Days',
     requiredDocuments: Array.isArray(service.requiredDocuments) ? service.requiredDocuments : (typeof service.requiredDocuments === 'string' ? service.requiredDocuments.split(',').map((x: string) => x.trim()).filter(Boolean) : []),
-    highlights: Array.isArray(service.highlights) ? service.highlights : [],
+    highlights: Array.isArray(service.highlights) ? service.highlights : (Array.isArray(service.features) ? service.features : []),
+    features: Array.isArray(service.features) ? service.features : (Array.isArray(service.highlights) ? service.highlights : []),
     eligibility: service.eligibility || 'All eligible citizens and businesses',
     howItWorks: service.howItWorks || '',
     faqs: Array.isArray(service.faqs) ? service.faqs : [],
-    seoTitle: service.seoTitle || service.title,
+    seoTitle: service.seoTitle || title,
     seoDescription: service.seoDescription || service.shortDescription || service.description || '',
     slug: service.slug || id,
-    status: service.status || 'active',
+    status: service.status ? service.status.toLowerCase() : 'active',
     whatsAppEnabled: service.whatsAppEnabled !== false,
     featured: !!service.featured,
     popular: !!service.popular,
     displayOrder: Number(service.displayOrder) || dbState.services.length + 1,
     popularity: Number(service.popularity) || 80
   };
-  dbState.services.push(newSvc);
+
+  if (existingIdx >= 0) {
+    dbState.services[existingIdx] = { ...dbState.services[existingIdx], ...newSvc };
+  } else {
+    dbState.services.push(newSvc);
+  }
   logSystemAction(updaterId || (req as any).user?.id || 'super-admin-deepak', updaterName || (req as any).user?.name || 'Deepak', updaterRole || (req as any).user?.role || 'SUPER_ADMIN', 'SERVICE_CREATE', `Created service ${newSvc.title}`);
   await persistDatabase('services', newSvc.id);
   res.status(201).json(newSvc);
@@ -7290,9 +7477,17 @@ app.put('/api/admin/services/:id', authenticateToken, requireRole(['SUPER_ADMIN'
   const idx = dbState.services.findIndex(s => s.id === req.params.id);
   if (idx === -1) return res.status(404).json({ message: 'Service not found' });
   
+  const title = service.title || service.name || dbState.services[idx].title;
+  const price = service.price !== undefined ? Number(service.price) : dbState.services[idx].price;
+  const serviceCharge = service.serviceCharge !== undefined ? Number(service.serviceCharge) : (service.price !== undefined ? Number(service.price) : dbState.services[idx].serviceCharge);
+
   dbState.services[idx] = { 
     ...dbState.services[idx], 
     ...service,
+    title,
+    name: title,
+    price,
+    serviceCharge,
     id: req.params.id,
     categoryId: service.categoryId || dbState.services[idx].categoryId
   };
@@ -7340,7 +7535,7 @@ app.post('/api/admin/blogs', authenticateToken, requireRole(['SUPER_ADMIN', 'ADM
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const blog = req.body?.blog || req.body || {};
   if (!blog || !blog.title) return res.status(400).json({ message: 'Blog title is required' });
-  const id = `blog-${Date.now()}`;
+  const id = blog.id || `blog-${Date.now()}`;
   
   let targetCatId = blog.categoryId;
   let targetCatName = blog.category;
@@ -7363,12 +7558,14 @@ app.post('/api/admin/blogs', authenticateToken, requireRole(['SUPER_ADMIN', 'ADM
     targetCatName = 'Government Schemes';
   }
 
+  const existingIdx = dbState.blogs.findIndex(b => b.id === id);
   const newBlog = {
     id,
     title: blog.title,
     content: blog.content || '',
-    excerpt: blog.excerpt || blog.shortDescription || (blog.content ? blog.content.slice(0, 160) : ''),
-    shortDescription: blog.shortDescription || blog.excerpt || (blog.content ? blog.content.slice(0, 160) : ''),
+    excerpt: blog.excerpt || blog.shortDescription || blog.summary || (blog.content ? blog.content.slice(0, 160) : ''),
+    shortDescription: blog.shortDescription || blog.excerpt || blog.summary || (blog.content ? blog.content.slice(0, 160) : ''),
+    summary: blog.summary || blog.excerpt || blog.shortDescription || (blog.content ? blog.content.slice(0, 160) : ''),
     categoryId: targetCatId,
     category: targetCatName,
     tags: Array.isArray(blog.tags) ? blog.tags : (typeof blog.tags === 'string' ? blog.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []),
@@ -7379,6 +7576,7 @@ app.post('/api/admin/blogs', authenticateToken, requireRole(['SUPER_ADMIN', 'ADM
     comments: [],
     views: 0,
     status: blog.status || 'active',
+    published: blog.published !== false,
     scheduledAt: blog.scheduledAt || '',
     seoTitle: blog.seoTitle || blog.title,
     seoDescription: blog.seoDescription || blog.excerpt || '',
@@ -7386,7 +7584,12 @@ app.post('/api/admin/blogs', authenticateToken, requireRole(['SUPER_ADMIN', 'ADM
     focusKeywords: blog.focusKeywords || '',
     commentsEnabled: blog.commentsEnabled !== false
   };
-  dbState.blogs.push(newBlog);
+
+  if (existingIdx >= 0) {
+    dbState.blogs[existingIdx] = { ...dbState.blogs[existingIdx], ...newBlog };
+  } else {
+    dbState.blogs.push(newBlog);
+  }
   logSystemAction(updaterId || (req as any).user?.id || 'super-admin-deepak', updaterName || (req as any).user?.name || 'Deepak', updaterRole || (req as any).user?.role || 'SUPER_ADMIN', 'BLOG_CREATE', `Created blog ${newBlog.title}`);
   await persistDatabase('blogs', newBlog.id);
   res.status(201).json(newBlog);
@@ -7395,7 +7598,10 @@ app.post('/api/admin/blogs', authenticateToken, requireRole(['SUPER_ADMIN', 'ADM
 app.put('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN', 'ADMIN', 'STAFF', 'OPERATOR']), async (req, res) => {
   const { updaterId, updaterName, updaterRole } = req.body || {};
   const blog = req.body?.blog || req.body || {};
-  const idx = dbState.blogs.findIndex(b => b.id === req.params.id);
+  let idx = dbState.blogs.findIndex(b => b.id === req.params.id);
+  if (idx === -1) {
+    idx = dbState.blogs.findIndex(b => b.slug === req.params.id || b.title === req.params.id);
+  }
   if (idx === -1) return res.status(404).json({ message: 'Blog not found' });
 
   let targetCatId = blog.categoryId || dbState.blogs[idx].categoryId;
@@ -7412,7 +7618,7 @@ app.put('/api/admin/blogs/:id', authenticateToken, requireRole(['SUPER_ADMIN', '
   dbState.blogs[idx] = { 
     ...dbState.blogs[idx], 
     ...blog,
-    id: req.params.id,
+    id: dbState.blogs[idx].id,
     categoryId: targetCatId,
     category: targetCatName,
     tags: Array.isArray(blog.tags) ? blog.tags : (typeof blog.tags === 'string' ? blog.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : (dbState.blogs[idx].tags || []))
@@ -7682,8 +7888,12 @@ app.post('/api/admin/banners', async (req, res) => {
       const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
       const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
       const buffer = Buffer.from(base64, 'base64');
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      fs.writeFileSync(targetPath, buffer);
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, buffer);
+      } catch (fsErr) {}
+      await uploadToFirebaseStorage(`media/${storedFileName}`, buffer, 'image/jpeg');
+      await putR2File(`media/${storedFileName}`, buffer, 'image/jpeg');
       imageData = imageUrl;
       imageUrl = `/uploads/media/${storedFileName}`;
     } catch (e) {
@@ -7724,8 +7934,12 @@ app.put('/api/admin/banners/:id', async (req, res) => {
       const targetPath = path.join(process.cwd(), 'uploads', 'media', storedFileName);
       const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
       const buffer = Buffer.from(base64, 'base64');
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      fs.writeFileSync(targetPath, buffer);
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, buffer);
+      } catch (fsErr) {}
+      await uploadToFirebaseStorage(`media/${storedFileName}`, buffer, 'image/jpeg');
+      await putR2File(`media/${storedFileName}`, buffer, 'image/jpeg');
       imageData = imageUrl;
       imageUrl = `/uploads/media/${storedFileName}`;
     } catch (e) {
@@ -7939,8 +8153,7 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
       }
 
       const mediaId = `med-${timeStamp}`;
-      // Prefer direct high-availability Firebase Storage URL, with local proxy fallback
-      const fileUrl = fbUpload.downloadUrl || `/uploads/media/${storedFileName}`;
+      const fileUrl = `/uploads/media/${storedFileName}`;
 
       const newMedia = {
         id: mediaId,
@@ -7954,7 +8167,8 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
         size: sizeStr,
         sizeBytes,
         url: fileUrl,
-        downloadUrl: fbUpload.downloadUrl,
+        downloadUrl: fbUpload.downloadUrl || fileUrl,
+        fileData: sizeBytes <= 850 * 1024 ? fileData : undefined,
         accessLevel: 'public' as const,
         folder: folder || 'uploads',
         title: title || cleanOriginalName,
@@ -7982,7 +8196,7 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
       logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'MEDIA_UPLOAD', `Uploaded media file: ${newMedia.name} (${sizeStr})`);
       await persistDatabase('media', newMedia.id);
 
-      return res.status(201).json(newMedia);
+      return res.status(200).json(newMedia);
     } catch (err: any) {
       console.error('Error saving media upload:', err);
       return res.status(500).json({ message: 'Failed to process file upload.', error: err.message });
@@ -8019,7 +8233,7 @@ app.post(['/api/admin/media/upload', '/api/admin/media'], async (req, res) => {
   logSystemAction(updaterId || 'super-admin-deepak', updaterName || 'Deepak', updaterRole || 'SUPER_ADMIN', 'MEDIA_LINK', `Linked media resource: ${newMedia.name}`);
   await persistDatabase('media', newMedia.id);
 
-  res.status(201).json(newMedia);
+  res.status(200).json(newMedia);
 });
 
 // UPDATE media item metadata

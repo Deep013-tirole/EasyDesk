@@ -10,7 +10,8 @@
     "iconv-lite": "./src/shims/iconv-lite.cjs"
   },
   "vars": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "FIREBASE_STORAGE_BUCKET": "khaki-fact-snzsc.firebasestorage.app"
   },
   "d1_databases": [
     {

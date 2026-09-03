@@ -460,6 +460,7 @@ export interface Order {
   paymentDate?: string;
   rejectionReason?: string;
   orderStatus: OrderStatus;
+  status?: OrderStatus | string;
   documentDeliveryStatus?: DocumentDeliveryStatus;
   finalDocumentUrl?: string;
   finalDocumentName?: string;
